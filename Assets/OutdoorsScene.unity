@@ -136,7 +136,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3b1bb8c31e91e34394aa18d870cf72d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UVMapBaker
-  bakeShader: {fileID: 7200000, guid: 67d28e4057900234d99e00862a72841b, type: 3}
+  bakeShader: {fileID: 4800000, guid: de0c9190aaba52b419da4e40e9131f0d, type: 3}
   resolution: 2048
 --- !u!1 &157207112
 GameObject:
@@ -404,7 +404,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d0e2e186f632b4147a068bc18374a71b, type: 3}
       propertyPath: m_LocalPosition.y
-      value: -0
+      value: -0.518
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: d0e2e186f632b4147a068bc18374a71b, type: 3}
       propertyPath: m_LocalPosition.z
@@ -547,7 +547,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a3b1bb8c31e91e34394aa18d870cf72d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::UVMapBaker
-  bakeShader: {fileID: 7200000, guid: 67d28e4057900234d99e00862a72841b, type: 3}
+  bakeShader: {fileID: 4800000, guid: de0c9190aaba52b419da4e40e9131f0d, type: 3}
   resolution: 2048
 --- !u!1 &432432459
 GameObject:
