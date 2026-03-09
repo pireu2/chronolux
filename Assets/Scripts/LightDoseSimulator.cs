@@ -13,7 +13,7 @@ using UnityEngine.Rendering.HighDefinition;
 [AddComponentMenu("ChronoLux/Light Dose Simulator")]
 public class LightDoseSimulator : MonoBehaviour
 {
-    [Header("Museum Location")]
+    [Header("Location")]
     [Tooltip("Geographic latitude in decimal degrees (positive = North).")]
     public double latitude = 44.4268;  // Bucharest, Romania
 
@@ -33,17 +33,8 @@ public class LightDoseSimulator : MonoBehaviour
     [Tooltip("Last day to simulate (day-of-year, inclusive).")]
     public int endDay = 365;
 
-    [Tooltip("Simulate every N-th day (1 = every day, 7 = once a week, etc.).")]
-    public int dayStep = 7;
-
-    [Tooltip("Start of the working day in local hours (8 = 08:00).")]
-    public int startHour = 8;
-
-    [Tooltip("End of the working day in local hours, exclusive (18 = up to 18:00).")]
-    public int endHour = 18;
-
-    [Tooltip("Duration of each time step in seconds (1800 = 30 minutes).")]
-    public float stepSeconds = 1800f;
+    [Tooltip("Duration of each time step in seconds (3600 = 1 hour).")]
+    public float stepSeconds = 3600f;
 
     [Header("Scene References")]
     [Tooltip("The scene's main Directional Light (the Sun).")]
@@ -81,7 +72,7 @@ public class LightDoseSimulator : MonoBehaviour
     [ContextMenu("Preview Sun At Noon")]
     public void PreviewNoon()
     {
-        DateTime noon = new DateTime(year, 6, 21, 12, 0, 0); // summer solstice noon
+        DateTime noon = new(year, 6, 21, 12, 0, 0); // summer solstice noon
         ApplySunPosition(noon);
         Debug.Log($"[SunCalc] {simulatedTime}  az={azimuthDeg:F1}°  alt={altitudeDeg:F1}°  {beamLux:F0} Lux");
     }
@@ -93,24 +84,30 @@ public class LightDoseSimulator : MonoBehaviour
         float deltaHours = stepSeconds / 3600f;
         CurrentDeltaHours = deltaHours;
 
-        int totalSteps = 0;
-        for (int d = startDay; d <= endDay; d += Mathf.Max(1, dayStep))
-            totalSteps += Mathf.Max(1, Mathf.CeilToInt((endHour - startHour) * 3600f / stepSeconds));
+        int totalDays = endDay - startDay + 1;
+        Debug.Log($"[LightDoseSimulator] Starting. {totalDays} days to simulate (sunrise→sunset each day).");
 
         int completedSteps = 0;
-        Debug.Log($"[LightDoseSimulator] Starting. ~{totalSteps} steps to dispatch.");
 
-        for (int day = startDay; day <= endDay; day += Mathf.Max(1, dayStep))
+        for (int day = startDay; day <= endDay; day++)
         {
-            // Convert day-of-year to a DateTime
             DateTime date = new DateTime(year, 1, 1).AddDays(day - 1);
 
-            for (float hour = startHour; hour < endHour; hour += deltaHours)
-            {
-                int h = (int)hour;
-                int m = (int)((hour - h) * 60f);
-                DateTime localTime = new DateTime(date.Year, date.Month, date.Day, h, m, 0);
+            // Compute sunrise and sunset for this specific day and location.
+            // Steps outside this window contribute zero irradiance and are skipped entirely.
+            DateTime sunrise = SunCalculator.FindSunrise(date, latitude, longitude, utcOffset);
+            DateTime sunset = SunCalculator.FindSunset(date, latitude, longitude, utcOffset);
 
+            if (sunrise == date && sunset == date)
+            {
+                // Polar night — sun never rises, skip the whole day
+                yield return null;
+                continue;
+            }
+
+            // Step from sunrise to sunset in increments of stepSeconds
+            for (DateTime localTime = sunrise; localTime < sunset; localTime = localTime.AddSeconds(stepSeconds))
+            {
                 // ── 1. Sun position ──────────────────────────────────────────
                 ApplySunPosition(localTime);
 

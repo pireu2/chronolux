@@ -89,10 +89,12 @@ public static class SunCalculator
                              - 1.25 * e * e * Math.Sin(2 * Mrad))
                    * (180.0 / Math.PI); // radians → degrees; *4 converts degrees to minutes of time
 
-        // True Solar Time (minutes) 
-        // timeMin is UTC minutes-of-day; add longitude correction (4 min/degree) and equation of time
+        // True Solar Time (minutes)
+        // timeMin is UTC minutes-of-day. The NOAA formula with UTC input is:
+        //   TST = UTC_minutes + 4 * longitude + EqT
+        // Do NOT add utcOffset here — it was already subtracted when converting to UTC above.
         double timeMin = utc.TimeOfDay.TotalMinutes;
-        double trueSolar = (timeMin + 4.0 * longitude + eqT + utcOffsetHours * 60.0) % 1440.0;
+        double trueSolar = (timeMin + 4.0 * longitude + eqT) % 1440.0;
         if (trueSolar < 0) trueSolar += 1440.0;
 
         // Hour Angle H — distance from solar noon in degrees 
@@ -119,8 +121,13 @@ public static class SunCalculator
         {
             double cosAz = (Math.Sin(latR) * cosZen - Math.Sin(decl)) / (Math.Cos(latR) * sinZen);
             cosAz = Math.Max(-1.0, Math.Min(1.0, cosAz));
-            az = Math.Acos(cosAz) * 180.0 / Math.PI;
-            if (HA > 0.0) az = 360.0 - az; // afternoon: sun is west of south
+            double azAcos = Math.Acos(cosAz) * 180.0 / Math.PI;
+            // Convert the raw acos result to degrees-from-North-clockwise (NOAA formula):
+            //   Morning (HA ≤ 0): az = (540 − acos) mod 360
+            //   Afternoon (HA > 0): az = (acos + 180) mod 360
+            az = HA > 0.0
+                ? (azAcos + 180.0) % 360.0
+                : (540.0 - azAcos) % 360.0;
         }
 
         return new SunPosition
@@ -146,6 +153,51 @@ public static class SunCalculator
         );
     }
 
+
+    // Find the local time of sunrise on a given date using binary search.
+    // Returns midnight (00:00) if the sun never rises (polar night).
+    public static DateTime FindSunrise(DateTime localDate, double latitude, double longitude, double utcOffset)
+    {
+        return FindCrossing(localDate, latitude, longitude, utcOffset, rising: true);
+    }
+
+    // Find the local time of sunset on a given date using binary search.
+    // Returns midnight (00:00) if the sun never sets (midnight sun).
+    public static DateTime FindSunset(DateTime localDate, double latitude, double longitude, double utcOffset)
+    {
+        return FindCrossing(localDate, latitude, longitude, utcOffset, rising: false);
+    }
+
+    // Binary-search for the moment altitude crosses zero.
+    // Coarse pass: 15-minute intervals to bracket the crossing.
+    // Fine pass: binary search to 1-minute precision.
+    private static DateTime FindCrossing(DateTime localDate, double lat, double lon,
+                                         double utcOffset, bool rising)
+    {
+        DateTime day = localDate.Date;
+
+        DateTime lo = day, hi = day;
+        bool found = false;
+        for (int min = 0; min < 1440; min += 15)
+        {
+            DateTime t0 = day.AddMinutes(min);
+            DateTime t1 = day.AddMinutes(min + 15);
+            float alt0 = Calculate(lat, lon, utcOffset, t0).AltitudeDeg;
+            float alt1 = Calculate(lat, lon, utcOffset, t1).AltitudeDeg;
+            bool cross = rising ? (alt0 <= 0f && alt1 > 0f) : (alt0 >= 0f && alt1 < 0f);
+            if (cross) { lo = t0; hi = t1; found = true; break; }
+        }
+        if (!found) return day; // polar night or midnight sun
+
+        while ((hi - lo).TotalMinutes > 1.0)
+        {
+            DateTime mid = lo.AddMinutes((hi - lo).TotalMinutes / 2.0);
+            float altMid = Calculate(lat, lon, utcOffset, mid).AltitudeDeg;
+            bool inLo = rising ? altMid <= 0f : altMid >= 0f;
+            if (inLo) lo = mid; else hi = mid;
+        }
+        return lo;
+    }
 
     // REFERENCE — Optical air mass (Kasten-Young formula):
     //   Kasten, F., Young, A.T. (1989). "Revised optical air mass tables and approximation formula."
