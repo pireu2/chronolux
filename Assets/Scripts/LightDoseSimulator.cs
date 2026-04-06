@@ -43,6 +43,14 @@ public class LightDoseSimulator : MonoBehaviour
     [Tooltip("UVMapBaker that has already baked the artifact's PositionMap and NormalMap.")]
     public UVMapBaker baker;
 
+    [Tooltip("Irradiance baker that executes the DXR shader to accumulate dose.")]
+    public IrradianceBaker irradianceBaker;
+
+    [Tooltip("Optional explicit renderer for preview. If null, first renderer under baker is used.")]
+    public Renderer previewRenderer;
+
+    [Tooltip("Material texture property used to show the baked result.")]
+    public string previewTextureProperty = "_BaseColorMap";
 
     [Header("Progress (read-only at runtime)")]
     [SerializeField] private string simulatedTime = "–";
@@ -77,12 +85,63 @@ public class LightDoseSimulator : MonoBehaviour
         Debug.Log($"[SunCalc] {simulatedTime}  az={azimuthDeg:F1}°  alt={altitudeDeg:F1}°  {beamLux:F0} Lux");
     }
 
+    [ContextMenu("Test Static Bake (1 Hour)")]
+    public void TestStaticBake()
+    {
+        if (!ValidateReferences()) return;
+
+        // 1. Ensure UV maps are baked
+        if (baker.PositionMap == null || baker.NormalMap == null)
+        {
+            Debug.Log("[LightDoseSimulator] Baking UV Maps...");
+            baker.Bake();
+        }
+
+        // 2. Initialize Irradiance Baker
+        // This clears the DoseMap to zero.
+        irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
+
+        // 3. Set Sun position (Summer Solstice Noon)
+        DateTime noon = new(year, 6, 21, 12, 0, 0);
+        ApplySunPosition(noon);
+
+        // 4. Dispatch a single hour
+        // We use the CurrentSunDirection and CurrentBeamLux calculated in ApplySunPosition
+        irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, 1.0f, baker.PositionMap, baker.NormalMap);
+
+        // 5. Apply preview to the renderer
+        ApplyDosePreview();
+
+        // 6. Force a scene repaint so we see the sun orientation change immediately
+#if UNITY_EDITOR
+        UnityEditor.SceneView.RepaintAll();
+#endif
+
+        string rendererName = previewRenderer != null ? previewRenderer.name : (baker != null ? baker.name : "artifact");
+        Debug.Log($"[LightDoseSimulator] Static bake complete for {simulatedTime}. BeamLux: {CurrentBeamLux:F0}. " +
+                  $"Sun Azimuth: {azimuthDeg:F1}, Altitude: {altitudeDeg:F1}. Check '{rendererName}' for result.");
+    }
+
     private IEnumerator RunSimulation()
     {
         if (!ValidateReferences()) yield break;
 
         float deltaHours = stepSeconds / 3600f;
         CurrentDeltaHours = deltaHours;
+
+        if (baker != null)
+        {
+            if (baker.PositionMap == null)
+            {
+                Debug.LogWarning("[LightDoseSimulator] baker.PositionMap is null. Attempting to bake first.");
+                baker.Bake();
+            }
+
+            if (irradianceBaker != null && baker.PositionMap != null)
+            {
+                irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
+            }
+        }
 
         int totalDays = endDay - startDay + 1;
         Debug.Log($"[LightDoseSimulator] Starting. {totalDays} days to simulate (sunrise→sunset each day).");
@@ -111,9 +170,11 @@ public class LightDoseSimulator : MonoBehaviour
                 // ── 1. Sun position ──────────────────────────────────────────
                 ApplySunPosition(localTime);
 
-                // ── 2. Dispatch irradiance accumulator (placeholder) ─────────
-                // TODO: When IrradianceBake.compute is ready, call:
-                //   DispatchIrradianceBake(CurrentSunDirection, CurrentBeamLux, CurrentDeltaHours);
+                // ── 2. Dispatch irradiance accumulator ─────────
+                if (irradianceBaker != null && baker != null && baker.PositionMap != null)
+                {
+                    irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDeltaHours, baker.PositionMap, baker.NormalMap);
+                }
 
                 // ── 3. Yield so the Editor doesn't freeze ────────────────────
                 completedSteps++;
@@ -121,7 +182,40 @@ public class LightDoseSimulator : MonoBehaviour
             }
         }
 
+        ApplyDosePreview();
+
         Debug.Log("[LightDoseSimulator] Simulation complete.");
+    }
+
+    private void ApplyDosePreview()
+    {
+        if (irradianceBaker == null || irradianceBaker.DoseMap == null)
+        {
+            Debug.LogWarning("[LightDoseSimulator] Dose preview skipped: DoseMap is not available.");
+            return;
+        }
+
+        Renderer targetRenderer = previewRenderer;
+        if (targetRenderer == null && baker != null)
+        {
+            targetRenderer = baker.GetComponentInChildren<Renderer>(true);
+        }
+
+        if (targetRenderer == null)
+        {
+            Debug.LogWarning("[LightDoseSimulator] Dose preview skipped: no target renderer found.");
+            return;
+        }
+
+        Material material = targetRenderer.material;
+        material.SetTexture(previewTextureProperty, irradianceBaker.DoseMap);
+
+        if (previewTextureProperty != "_MainTex" && material.HasProperty("_MainTex"))
+        {
+            material.SetTexture("_MainTex", irradianceBaker.DoseMap);
+        }
+
+        Debug.Log($"[LightDoseSimulator] Applied DoseMap preview to '{targetRenderer.name}' using property '{previewTextureProperty}'.");
     }
 
     // Compute sun position for <paramref name="localTime"/> and apply it to the scene light.
@@ -169,6 +263,9 @@ public class LightDoseSimulator : MonoBehaviour
 
         if (baker == null)
             Debug.LogWarning("[LightDoseSimulator] baker is not assigned — dose accumulation will be skipped.");
+
+        if (irradianceBaker == null)
+            Debug.LogWarning("[LightDoseSimulator] irradianceBaker is not assigned — DXR dose accumulation will be skipped.");
 
         if (stepSeconds <= 0f)
         {
