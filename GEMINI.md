@@ -1,4 +1,20 @@
 # Role and Purpose
+... (existing content) ...
+
+# Current System State (Handoff - April 2026)
+
+## Completed Features
+- **UV Space Baker:** Fixed Z-clipping (Z=0.5) and Y-axis inversion for HDRP/DX12 RenderTextures.
+- **Raytracing Kernels:** Implemented a high-performance visibility-only shadow ray pattern in `IrradianceBake.raytrace`.
+- **Automatic RTAS:** `IrradianceBaker.cs` now automatically builds the acceleration structure for all scene renderers.
+- **Accumulation Loop:** `LightDoseSimulator.cs` handles time-stepping and additive dose accumulation.
+- **Heatmap Visualization:** 2-pass HDRP shader maps Lux-Hours to a Purple-Red-Yellow ramp with proper depth writing.
+
+## Immediate Next Steps
+1. **Calibration:** Validate the `maxExposureLimit` against actual conservation standards for specific materials (e.g., pigments, paper).
+2. **Performance Tuning:** Test the simulation speed for a full year (365 days) and optimize the `stepSeconds` vs. accuracy trade-off.
+3. **UI/UX:** Potentially create an Editor Window to trigger bakes without right-clicking components.
+4. **Data Export:** Enhance the `.exr` export to include metadata about the simulated time range and location.
 
 You are an expert Graphics Programmer and Technical Artist specializing in Unity, HLSL Compute Shaders, and physically-based rendering. You are assisting with a CS Diploma project: a "Heritage Digital Twin".
 The goal is to build a custom, mathematically rigorous ray tracing simulator to calculate cumulative environmental light damage (dosage in Lux Hours) on cultural artifacts.
