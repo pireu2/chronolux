@@ -411,16 +411,19 @@ MonoBehaviour:
   latitude: 44.4268
   longitude: 26.1025
   utcOffset: 3
-  year: 2025
-  startDay: 1
-  endDay: 10
+  year: 2026
+  startDay: 172
+  endDay: 172
   stepSeconds: 1800
   sunLight: {fileID: 157207113}
   baker: {fileID: 429242158}
   irradianceBaker: {fileID: 183423943}
   previewRenderer: {fileID: 0}
-  previewTextureProperty: _BaseColorMap
+  previewTextureProperty: _DoseMap
+  maxExposureLimit: 100000
   simulatedTime: "\u2013"
+  progressPercent: 0
+  completedSteps: 0
   beamLux: 0
   azimuthDeg: 0
   altitudeDeg: 0
@@ -592,6 +595,10 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: -7635826562936255635, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 4a78f9c4cdfef604281bcfdeb93f7aa0, type: 2}
     - target: {fileID: 919132149155446097, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
       propertyPath: m_Name
       value: dragon
@@ -717,7 +724,6 @@ GameObject:
   - component: {fileID: 860855126}
   - component: {fileID: 860855125}
   - component: {fileID: 860855129}
-  - component: {fileID: 860855130}
   m_Layer: 0
   m_Name: Cube
   m_TagString: Untagged
@@ -832,18 +838,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::UVMapBaker
   bakeShader: {fileID: 4800000, guid: de0c9190aaba52b419da4e40e9131f0d, type: 3}
   resolution: 2048
---- !u!114 &860855130
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 860855124}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 44abd04523f4b6b4ea238a8241051c7b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::RayTracingTarget
 --- !u!1001 &1144392592
 PrefabInstance:
   m_ObjectHideFlags: 0

@@ -50,10 +50,15 @@ public class LightDoseSimulator : MonoBehaviour
     public Renderer previewRenderer;
 
     [Tooltip("Material texture property used to show the baked result.")]
-    public string previewTextureProperty = "_BaseColorMap";
+    public string previewTextureProperty = "_DoseMap";
+
+    [Tooltip("Normalization limit for the heatmap (Lux*Hours).")]
+    public float maxExposureLimit = 100000f;
 
     [Header("Progress (read-only at runtime)")]
     [SerializeField] private string simulatedTime = "–";
+    [SerializeField] private float progressPercent = 0f;
+    [SerializeField] private int completedSteps = 0;
     [SerializeField] private float beamLux = 0f;
     [SerializeField] private float azimuthDeg = 0f;
     [SerializeField] private float altitudeDeg = 0f;
@@ -146,11 +151,12 @@ public class LightDoseSimulator : MonoBehaviour
         int totalDays = endDay - startDay + 1;
         Debug.Log($"[LightDoseSimulator] Starting. {totalDays} days to simulate (sunrise→sunset each day).");
 
-        int completedSteps = 0;
-
+        int currentDayIdx = 0;
         for (int day = startDay; day <= endDay; day++)
         {
             DateTime date = new DateTime(year, 1, 1).AddDays(day - 1);
+            progressPercent = (float)currentDayIdx / totalDays * 100f;
+            currentDayIdx++;
 
             // Compute sunrise and sunset for this specific day and location.
             // Steps outside this window contribute zero irradiance and are skipped entirely.
@@ -210,12 +216,19 @@ public class LightDoseSimulator : MonoBehaviour
         Material material = targetRenderer.material;
         material.SetTexture(previewTextureProperty, irradianceBaker.DoseMap);
 
-        if (previewTextureProperty != "_MainTex" && material.HasProperty("_MainTex"))
+        // If using the HeatmapVisualizer shader, set the normalization limit
+        if (material.HasProperty("_MaxDose"))
         {
-            material.SetTexture("_MainTex", irradianceBaker.DoseMap);
+            material.SetFloat("_MaxDose", maxExposureLimit);
+        }
+        
+        // Also fallback to _BaseColorMap if the user is using a standard shader
+        if (previewTextureProperty != "_BaseColorMap" && material.HasProperty("_BaseColorMap"))
+        {
+            material.SetTexture("_BaseColorMap", irradianceBaker.DoseMap);
         }
 
-        Debug.Log($"[LightDoseSimulator] Applied DoseMap preview to '{targetRenderer.name}' using property '{previewTextureProperty}'.");
+        Debug.Log($"[LightDoseSimulator] Applied DoseMap preview to '{targetRenderer.name}'. Max Dose: {maxExposureLimit:F0} Lux*Hours.");
     }
 
     // Compute sun position for <paramref name="localTime"/> and apply it to the scene light.
