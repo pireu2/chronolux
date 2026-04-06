@@ -1,0 +1,46 @@
+#pragma max_recursion_depth 1
+#pragma raytracing IrradianceBakeRayGen
+
+Texture2D<float4> _PositionMap;
+Texture2D<float4> _NormalMap;
+float3 _SunDirection;
+float _BeamLux;
+float _DeltaHours;
+RWTexture2D<float> _DoseMap;
+RaytracingAccelerationStructure _SceneRTAS;
+
+struct Payload { bool isOccluded; };
+
+[shader("raygeneration")]
+void IrradianceBakeRayGen()
+{
+    uint2 id = DispatchRaysIndex().xy;
+    float4 pos = _PositionMap[id];
+    float4 nrm = _NormalMap[id];
+    
+    if (pos.w == 0.0 || length(nrm.xyz) < 0.1) return;
+    
+    float3 normal = normalize(nrm.xyz);
+    float nDotL = dot(normal, _SunDirection);
+    if (nDotL <= 0) return;
+
+    RayDesc ray;
+    ray.Origin = pos.xyz + normal * 0.002;
+    ray.Direction = _SunDirection;
+    ray.TMin = 0.001;
+    ray.TMax = 100000.0;
+
+    Payload payload;
+    payload.isOccluded = true; 
+    
+    // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4) | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER (0x8)
+    TraceRay(_SceneRTAS, 0xD, 0xFF, 0, 1, 0, ray, payload);
+    
+    if (!payload.isOccluded)
+    {
+        _DoseMap[id] += _BeamLux * nDotL * _DeltaHours;
+    }
+}
+
+[shader("miss")]
+void MissMain(inout Payload payload) { payload.isOccluded = false; }
