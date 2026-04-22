@@ -6,16 +6,21 @@ Texture2D<float4> _NormalMap;
 float3 _SunDirection;
 float _BeamLux;
 float _DeltaHours;
-float _MaterialCount;
+uint _MaterialCount;
 RWTexture2D<float> _DoseMap;
 RaytracingAccelerationStructure _SceneRTAS;
 StructuredBuffer<float4> _SimulationMaterials;
+
+static const uint MAX_TRANSMISSIVE_LAYERS = 8;
+static const float RAY_BIAS = 0.002;
+static const float MIN_VISIBILITY = 1e-4;
 
 struct Payload
 {
     bool isOccluded;
     float reflectance;
     float transmittance;
+    float hitDistance;
 };
 
 [shader("raygeneration")]
@@ -31,21 +36,52 @@ void IrradianceBakeRayGen()
     float nDotL = dot(normal, _SunDirection);
     if (nDotL <= 0) return;
 
-    RayDesc ray;
-    ray.Origin = pos.xyz + normal * 0.002;
-    ray.Direction = _SunDirection;
-    ray.TMin = 0.001;
-    ray.TMax = 100000.0;
+    float visibility = 1.0;
+    float3 currentOrigin = pos.xyz + normal * RAY_BIAS;
+    bool reachedSky = false;
 
-    Payload payload;
-    payload.isOccluded = true;
-    payload.reflectance = 0.0;
-    payload.transmittance = 0.0;
-    
-    // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4)
-    TraceRay(_SceneRTAS, 0x5, 0xFF, 0, 1, 0, ray, payload);
-    
-    float visibility = payload.isOccluded ? saturate(payload.transmittance) : 1.0;
+    [loop]
+    for (uint layer = 0; layer < MAX_TRANSMISSIVE_LAYERS; layer++)
+    {
+        RayDesc ray;
+        ray.Origin = currentOrigin;
+        ray.Direction = _SunDirection;
+        ray.TMin = 0.001;
+        ray.TMax = 100000.0;
+
+        Payload payload;
+        payload.isOccluded = true;
+        payload.reflectance = 0.0;
+        payload.transmittance = 0.0;
+        payload.hitDistance = 0.0;
+
+        // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4)
+        TraceRay(_SceneRTAS, 0x5, 0xFF, 0, 1, 0, ray, payload);
+
+        if (!payload.isOccluded)
+        {
+            reachedSky = true;
+            break;
+        }
+
+        float layerTransmittance = saturate(payload.transmittance);
+        visibility *= layerTransmittance;
+
+        if (layerTransmittance <= MIN_VISIBILITY || visibility <= MIN_VISIBILITY)
+        {
+            visibility = 0.0;
+            break;
+        }
+
+        currentOrigin += _SunDirection * max(payload.hitDistance + RAY_BIAS, RAY_BIAS);
+    }
+
+    if (!reachedSky)
+    {
+        // A non-escaped shadow ray means we hit the layer budget before clear LOS.
+        visibility = 0.0;
+    }
+
     if (visibility > 0.0)
     {
         _DoseMap[id] += _BeamLux * nDotL * _DeltaHours * visibility;
@@ -58,6 +94,7 @@ void MissMain(inout Payload payload)
     payload.isOccluded = false;
     payload.reflectance = 0.0;
     payload.transmittance = 0.0;
+    payload.hitDistance = 0.0;
 }
 
 [shader("closesthit")]
@@ -66,9 +103,10 @@ void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttribu
     payload.isOccluded = true;
     payload.reflectance = 0.0;
     payload.transmittance = 0.0;
+    payload.hitDistance = RayTCurrent();
 
     uint materialIndex = InstanceID();
-    if ((float)materialIndex < _MaterialCount)
+    if (materialIndex < _MaterialCount)
     {
         float4 materialData = _SimulationMaterials[materialIndex];
         payload.reflectance = saturate(materialData.x);

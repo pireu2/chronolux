@@ -36,30 +36,100 @@ public class IrradianceBaker : MonoBehaviour
         transmittance *= inv;
     }
 
-    private static string GetTransformPath(Transform t)
+    private struct RendererSortEntry
+    {
+        public Renderer renderer;
+        public string sortKey;
+    }
+
+    private static string BuildTransformSortKey(Transform t)
     {
         if (t == null) return string.Empty;
 
-        var names = new List<string>(8);
+        var segments = new List<string>(8);
         while (t != null)
         {
-            names.Add(t.name);
+            // Sibling index disambiguates same-name siblings for deterministic ordering.
+            segments.Add($"{t.GetSiblingIndex():D6}:{t.name}");
             t = t.parent;
         }
-        names.Reverse();
-        return string.Join("/", names);
+        segments.Reverse();
+        return string.Join("/", segments);
     }
 
-    private static int CompareRenderersDeterministically(Renderer a, Renderer b)
+    private static int GetRendererComponentSlot(Renderer renderer)
     {
-        if (ReferenceEquals(a, b)) return 0;
-        if (a == null) return -1;
-        if (b == null) return 1;
+        if (renderer == null) return 0;
 
-        int sceneCompare = string.CompareOrdinal(a.gameObject.scene.path, b.gameObject.scene.path);
-        if (sceneCompare != 0) return sceneCompare;
+        Renderer[] siblings = renderer.GetComponents<Renderer>();
+        for (int i = 0; i < siblings.Length; i++)
+        {
+            if (ReferenceEquals(siblings[i], renderer)) return i;
+        }
 
-        return string.CompareOrdinal(GetTransformPath(a.transform), GetTransformPath(b.transform));
+        return 0;
+    }
+
+    private static string BuildRendererSortKey(Renderer renderer)
+    {
+        if (renderer == null) return string.Empty;
+
+        string scenePath = renderer.gameObject.scene.path ?? string.Empty;
+        string hierarchyKey = BuildTransformSortKey(renderer.transform);
+        int rendererSlot = GetRendererComponentSlot(renderer);
+        string rendererType = renderer.GetType().FullName;
+        return $"{scenePath}|{hierarchyKey}|{rendererType}|{rendererSlot:D4}";
+    }
+
+    private static int CompareRendererEntries(RendererSortEntry a, RendererSortEntry b)
+    {
+        if (ReferenceEquals(a.renderer, b.renderer)) return 0;
+        if (a.renderer == null) return -1;
+        if (b.renderer == null) return 1;
+
+        int keyCompare = string.CompareOrdinal(a.sortKey, b.sortKey);
+        if (keyCompare != 0) return keyCompare;
+
+        // Final deterministic tie-breaker for pathological duplicates.
+        return string.CompareOrdinal(a.renderer.name, b.renderer.name);
+    }
+
+    private static void ReadMaterialScalars(Material material, ref float reflectance, ref float transmittance)
+    {
+        if (material == null) return;
+
+        if (material.HasProperty("_Reflectance")) reflectance = material.GetFloat("_Reflectance");
+        if (material.HasProperty("_Transmittance")) transmittance = material.GetFloat("_Transmittance");
+    }
+
+    private void ResolveFromSharedMaterials(Renderer renderer, ref float reflectance, ref float transmittance)
+    {
+        Material[] sharedMaterials = renderer.sharedMaterials;
+        if (sharedMaterials == null || sharedMaterials.Length == 0) return;
+
+        if (sharedMaterials.Length > 1)
+        {
+            Debug.LogWarning($"[IrradianceBaker] Renderer '{renderer.name}' has {sharedMaterials.Length} shared materials. " +
+                             "Using conservative max of _Reflectance/_Transmittance across all submesh materials.");
+        }
+
+        float maxReflectance = reflectance;
+        float maxTransmittance = transmittance;
+
+        for (int i = 0; i < sharedMaterials.Length; i++)
+        {
+            float r = reflectance;
+            float t = transmittance;
+            ReadMaterialScalars(sharedMaterials[i], ref r, ref t);
+            ClampEnergy(ref r, ref t);
+
+            maxReflectance = Mathf.Max(maxReflectance, r);
+            maxTransmittance = Mathf.Max(maxTransmittance, t);
+        }
+
+        reflectance = maxReflectance;
+        transmittance = maxTransmittance;
+        ClampEnergy(ref reflectance, ref transmittance);
     }
 
     private void ResolveSimulationMaterial(Renderer renderer, out float reflectance, out float transmittance)
@@ -74,12 +144,7 @@ public class IrradianceBaker : MonoBehaviour
             return;
         }
 
-        Material sharedMaterial = renderer.sharedMaterial;
-        if (sharedMaterial != null)
-        {
-            if (sharedMaterial.HasProperty("_Reflectance")) reflectance = sharedMaterial.GetFloat("_Reflectance");
-            if (sharedMaterial.HasProperty("_Transmittance")) transmittance = sharedMaterial.GetFloat("_Transmittance");
-        }
+        ResolveFromSharedMaterials(renderer, ref reflectance, ref transmittance);
 
         ClampEnergy(ref reflectance, ref transmittance);
     }
@@ -103,18 +168,24 @@ public class IrradianceBaker : MonoBehaviour
         _materialCount = 0;
 
         Renderer[] allRenderers = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
-        var sortedRenderers = new List<Renderer>(allRenderers.Length);
+        var sortedRenderers = new List<RendererSortEntry>(allRenderers.Length);
         foreach (Renderer renderer in allRenderers)
         {
             if (renderer == null || !renderer.enabled || !renderer.gameObject.activeInHierarchy) continue;
-            sortedRenderers.Add(renderer);
+            sortedRenderers.Add(new RendererSortEntry
+            {
+                renderer = renderer,
+                sortKey = BuildRendererSortKey(renderer)
+            });
         }
-        sortedRenderers.Sort(CompareRenderersDeterministically);
+        sortedRenderers.Sort(CompareRendererEntries);
 
         var materialRows = new List<Vector4>(sortedRenderers.Count);
         int addedInstances = 0;
-        foreach (var r in sortedRenderers)
+        foreach (RendererSortEntry entry in sortedRenderers)
         {
+            Renderer r = entry.renderer;
+
             // Determine submesh count to avoid null/default ambiguity
             int subMeshCount = 1;
             if (r is MeshRenderer mr)
@@ -186,7 +257,7 @@ public class IrradianceBaker : MonoBehaviour
         cmd.SetRayTracingVectorParam(rayTracingShader, "_SunDirection", sunDirection);
         cmd.SetRayTracingFloatParam(rayTracingShader, "_BeamLux", beamLux);
         cmd.SetRayTracingFloatParam(rayTracingShader, "_DeltaHours", deltaHours);
-        cmd.SetRayTracingFloatParam(rayTracingShader, "_MaterialCount", _materialCount);
+        cmd.SetRayTracingIntParam(rayTracingShader, "_MaterialCount", _materialCount);
 
         Camera cam = Camera.main ?? GetComponent<Camera>();
         if (cam == null) { Debug.LogError("[IrradianceBaker] No Camera found."); cmd.Release(); return; }
