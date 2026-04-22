@@ -6,10 +6,17 @@ Texture2D<float4> _NormalMap;
 float3 _SunDirection;
 float _BeamLux;
 float _DeltaHours;
+float _MaterialCount;
 RWTexture2D<float> _DoseMap;
 RaytracingAccelerationStructure _SceneRTAS;
+StructuredBuffer<float4> _SimulationMaterials;
 
-struct Payload { bool isOccluded; };
+struct Payload
+{
+    bool isOccluded;
+    float reflectance;
+    float transmittance;
+};
 
 [shader("raygeneration")]
 void IrradianceBakeRayGen()
@@ -31,16 +38,40 @@ void IrradianceBakeRayGen()
     ray.TMax = 100000.0;
 
     Payload payload;
-    payload.isOccluded = true; 
+    payload.isOccluded = true;
+    payload.reflectance = 0.0;
+    payload.transmittance = 0.0;
     
-    // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4) | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER (0x8)
-    TraceRay(_SceneRTAS, 0xD, 0xFF, 0, 1, 0, ray, payload);
+    // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4)
+    TraceRay(_SceneRTAS, 0x5, 0xFF, 0, 1, 0, ray, payload);
     
-    if (!payload.isOccluded)
+    float visibility = payload.isOccluded ? saturate(payload.transmittance) : 1.0;
+    if (visibility > 0.0)
     {
-        _DoseMap[id] += _BeamLux * nDotL * _DeltaHours;
+        _DoseMap[id] += _BeamLux * nDotL * _DeltaHours * visibility;
     }
 }
 
 [shader("miss")]
-void MissMain(inout Payload payload) { payload.isOccluded = false; }
+void MissMain(inout Payload payload)
+{
+    payload.isOccluded = false;
+    payload.reflectance = 0.0;
+    payload.transmittance = 0.0;
+}
+
+[shader("closesthit")]
+void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
+{
+    payload.isOccluded = true;
+    payload.reflectance = 0.0;
+    payload.transmittance = 0.0;
+
+    uint materialIndex = InstanceID();
+    if ((float)materialIndex < _MaterialCount)
+    {
+        float4 materialData = _SimulationMaterials[materialIndex];
+        payload.reflectance = saturate(materialData.x);
+        payload.transmittance = saturate(materialData.y);
+    }
+}
