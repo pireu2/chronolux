@@ -17,10 +17,14 @@ Unlike traditional game renderers that calculate light for visual aesthetics (Sc
 
 ## Current Scope (WIP)
 
-- **Texture Space Path Tracing:** Custom HLSL Compute Shader that fires rays from the artifact's surface normals to sample incoming environmental light (Irradiance).
-- **Progressive Light Accumulation:** C# simulation loop that steps through time, accumulating light samples frame-by-frame to prevent GPU timeouts.
-- **Lux-to-Dose Conversion:** Translates instantaneous light energy ($E$) into total cumulative dose ($D_{total}$).
-- **Heatmap Visualization:** Custom surface shader that reads the accumulated exposure data and maps it to a color gradient (Safe vs. Danger) based on museum conservation thresholds.
+- **Texture Space Path Tracing:** Custom DXR (DirectX Raytracing) kernels that sample irradiance directly into UV-space textures, bypassing screen-space limitations.
+- **Material-Aware Simulation:** Physics-driven `SimulationMaterial` component for assigning real-world reflectance and transmittance values to scene geometry.
+- **Energy Conservation:** Mathematical clamping and normalization of light transport (Reflectance + Transmittance ≤ 1.0) to ensure thermodynamic validity.
+- **Deterministic RTAS Sorting:** Custom renderer sorting logic to ensure stable InstanceID-to-Material mapping across different hardware and sessions.
+- **Progressive Light Accumulation:** C# simulation loop that steps through time (Sunrise to Sunset), accumulating light samples to prevent GPU timeouts.
+- **Lux-to-Dose Conversion:** Translates instantaneous light energy ($E$) into total cumulative dose ($D_{total}$) in Lux Hours.
+- **Heatmap Visualization:** 2-pass HDRP shader mapping accumulated exposure data to a Purple-Red-Yellow gradient based on CIE 157:2004 conservation thresholds.
+
 
 ## Requirements
 
