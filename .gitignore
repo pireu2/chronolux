@@ -99,6 +99,6 @@ InitTestScene*.unity*
 /[Aa]ssets/[Ii]nit[Tt]est[Ss]cene*.unity*
 
 /[Aa]ssets/Scenes/*
-
+/[Aa]ssets/Models/*
 *.exr
 .vscode/
