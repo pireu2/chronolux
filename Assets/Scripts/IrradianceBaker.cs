@@ -11,6 +11,8 @@ public class IrradianceBaker : MonoBehaviour
     {
         public uint vertexOffset;
         public uint indexOffset;
+        public uint hasGeometry; // 1 if readable mesh data is available, 0 otherwise
+        public uint padding;     // Align to 16 bytes
     }
 
     private const int MAX_SUBMESHES = 8;
@@ -179,9 +181,9 @@ public class IrradianceBaker : MonoBehaviour
         sortedEntries.Sort(CompareRendererEntries);
 
         var materialRows = new List<Vector4>(sortedEntries.Count);
-        var allVertices = new List<Vector3>();
-        var allIndices = new List<int>();
-        var allMetadata = new MeshMetadata[sortedEntries.Count * MAX_SUBMESHES];
+        var allVertices = new List<Vector4>(); // Vector4 for alignment
+        var allIndices = new List<uint>();
+        var allMetadata = new MeshMetadata[Mathf.Max(1, sortedEntries.Count) * MAX_SUBMESHES];
 
         int addedInstances = 0;
         for (int i = 0; i < sortedEntries.Count; i++)
@@ -208,17 +210,19 @@ public class IrradianceBaker : MonoBehaviour
             if (mesh != null && mesh.isReadable)
             {
                 uint vOffset = (uint)allVertices.Count;
-                allVertices.AddRange(mesh.vertices);
+                foreach(var v in mesh.vertices) allVertices.Add(new Vector4(v.x, v.y, v.z, 1.0f));
 
                 for (int s = 0; s < Mathf.Min(subMeshCount, MAX_SUBMESHES); s++)
                 {
                     uint iOffset = (uint)allIndices.Count;
-                    allIndices.AddRange(mesh.GetIndices(s));
+                    int[] submeshIndices = mesh.GetIndices(s);
+                    foreach (int idx in submeshIndices) allIndices.Add((uint)idx);
 
                     allMetadata[i * MAX_SUBMESHES + s] = new MeshMetadata
                     {
                         vertexOffset = vOffset,
-                        indexOffset = iOffset
+                        indexOffset = iOffset,
+                        hasGeometry = 1
                     };
                 }
             }
@@ -234,28 +238,23 @@ public class IrradianceBaker : MonoBehaviour
             materialRows.Add(new Vector4(refl, trans, 0f, 0f));
             uint materialIndex = (uint)(materialRows.Count - 1);
 
-            _rtas.AddInstance(r, subMeshFlags, true, true, 0xFF, materialIndex);
+            _rtas.AddInstance(r, subMeshFlags, false, false, 0xFF, materialIndex);
             addedInstances++;
         }
 
         _materialCount = materialRows.Count;
-        if (_materialCount > 0)
-        {
-            _simulationMaterialBuffer = new ComputeBuffer(_materialCount, sizeof(float) * 4);
-            _simulationMaterialBuffer.SetData(materialRows);
+        
+        _simulationMaterialBuffer = new ComputeBuffer(Mathf.Max(1, _materialCount), 16);
+        _simulationMaterialBuffer.SetData(materialRows.Count > 0 ? materialRows.ToArray() : new Vector4[] { Vector4.zero });
 
-            _metadataBuffer = new ComputeBuffer(allMetadata.Length, 8);
-            _metadataBuffer.SetData(allMetadata);
-        }
+        _metadataBuffer = new ComputeBuffer(allMetadata.Length, 16);
+        _metadataBuffer.SetData(allMetadata);
 
-        if (allVertices.Count > 0)
-        {
-            _vertexBuffer = new ComputeBuffer(allVertices.Count, 12);
-            _vertexBuffer.SetData(allVertices.ToArray());
+        _vertexBuffer = new ComputeBuffer(Mathf.Max(1, allVertices.Count), 16); // 16 bytes for Vector4
+        _vertexBuffer.SetData(allVertices.Count > 0 ? allVertices.ToArray() : new Vector4[] { Vector4.zero });
 
-            _indexBuffer = new ComputeBuffer(allIndices.Count, 4);
-            _indexBuffer.SetData(allIndices.ToArray());
-        }
+        _indexBuffer = new ComputeBuffer(Mathf.Max(1, allIndices.Count), 4);
+        _indexBuffer.SetData(allIndices.Count > 0 ? allIndices.ToArray() : new uint[] { 0 });
 
         _rtas.Build();
 
@@ -293,17 +292,10 @@ public class IrradianceBaker : MonoBehaviour
         cmd.SetRayTracingTextureParam(rayTracingShader, "_DoseMap", _doseMap);
         cmd.SetRayTracingAccelerationStructure(rayTracingShader, "_SceneRTAS", _rtas);
 
-        if (_simulationMaterialBuffer != null)
-            cmd.SetRayTracingBufferParam(rayTracingShader, "_SimulationMaterials", _simulationMaterialBuffer);
-        
-        if (_metadataBuffer != null)
-            cmd.SetRayTracingBufferParam(rayTracingShader, "_MeshMetadata", _metadataBuffer);
-
-        if (_vertexBuffer != null)
-        {
-            cmd.SetRayTracingBufferParam(rayTracingShader, "_GlobalVertices", _vertexBuffer);
-            cmd.SetRayTracingBufferParam(rayTracingShader, "_GlobalIndices", _indexBuffer);
-        }
+        cmd.SetRayTracingBufferParam(rayTracingShader, "_SimulationMaterials", _simulationMaterialBuffer);
+        cmd.SetRayTracingBufferParam(rayTracingShader, "_MeshMetadata", _metadataBuffer);
+        cmd.SetRayTracingBufferParam(rayTracingShader, "_GlobalVertices", _vertexBuffer);
+        cmd.SetRayTracingBufferParam(rayTracingShader, "_GlobalIndices", _indexBuffer);
 
         cmd.SetRayTracingVectorParam(rayTracingShader, "_SunDirection", sunDirection);
         cmd.SetRayTracingFloatParam(rayTracingShader, "_BeamLux", beamLux);
@@ -322,11 +314,24 @@ public class IrradianceBaker : MonoBehaviour
     private void CleanUp()
     {
         if (_rtas != null) { _rtas.Release(); _rtas = null; }
-        if (_simulationMaterialBuffer != null) { _simulationMaterialBuffer.Release(); _simulationMaterialBuffer = null; }
-        if (_vertexBuffer != null) { _vertexBuffer.Release(); _vertexBuffer = null; }
-        if (_indexBuffer != null) { _indexBuffer.Release(); _indexBuffer = null; }
-        if (_metadataBuffer != null) { _metadataBuffer.Release(); _metadataBuffer = null; }
-        if (_doseMap != null) { _doseMap.Release(); DestroyImmediate(_doseMap); _doseMap = null; }
+        
+        void ReleaseBuffer(ref ComputeBuffer buffer)
+        {
+            if (buffer != null) { buffer.Release(); buffer = null; }
+        }
+
+        ReleaseBuffer(ref _simulationMaterialBuffer);
+        ReleaseBuffer(ref _vertexBuffer);
+        ReleaseBuffer(ref _indexBuffer);
+        ReleaseBuffer(ref _metadataBuffer);
+
+        if (_doseMap != null) 
+        { 
+            _doseMap.Release(); 
+            if (Application.isPlaying) Destroy(_doseMap);
+            else DestroyImmediate(_doseMap);
+            _doseMap = null; 
+        }
     }
 
     private void OnDestroy() => CleanUp();

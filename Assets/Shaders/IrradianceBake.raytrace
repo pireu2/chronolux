@@ -22,13 +22,15 @@ struct MeshMetadata
 {
     uint vertexOffset;
     uint indexOffset;
+    uint hasGeometry;
+    uint padding;
 };
 
-StructuredBuffer<float3> _GlobalVertices;
+StructuredBuffer<float4> _GlobalVertices; // Changed to float4 for alignment
 StructuredBuffer<uint> _GlobalIndices;
 StructuredBuffer<MeshMetadata> _MeshMetadata;
 
-static const uint MAX_BOUNCES = 4; // Reduced for performance during sampling
+static const uint MAX_BOUNCES = 4;
 static const float RAY_BIAS = 0.002;
 static const float MIN_VISIBILITY = 1e-4;
 static const uint MAX_SUBMESHES = 8;
@@ -71,7 +73,6 @@ float3 GetCosineWeightedDirection(float3 normal, inout uint seed)
     float y = r * sin(theta);
     float z = sqrt(max(0.0, 1.0 - u1));
 
-    // Create tangent space
     float3 up = abs(normal.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
     float3 tangent = normalize(cross(up, normal));
     float3 bitangent = cross(normal, tangent);
@@ -80,10 +81,9 @@ float3 GetCosineWeightedDirection(float3 normal, inout uint seed)
 }
 
 // ── UTILS ────────────────────────────────────────────────────────────────────
-float EvaluateSky(float3 direction)
+float EvaluateSky(float3 direction, bool includeSun)
 {
-    // Sun disk check
-    if (dot(direction, _SunDirection) > 0.9998) 
+    if (includeSun && dot(direction, _SunDirection) > 0.9998) 
     {
         return _BeamLux;
     }
@@ -94,7 +94,7 @@ float EvaluateSky(float3 direction)
 }
 
 // ── PATH TRACING ────────────────────────────────────────────────────────────
-float TracePath(float3 origin, float3 direction, float3 surfaceNormal)
+float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uint seed, bool isDirectSun)
 {
     float throughput = 1.0;
     float3 currentOrigin = origin + surfaceNormal * RAY_BIAS;
@@ -120,19 +120,22 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal)
 
         if (!payload.isOccluded)
         {
-            return EvaluateSky(currentDir) * throughput;
+            return EvaluateSky(currentDir, isDirectSun) * throughput;
         }
 
-        if (payload.reflectance > 0.5)
+        // Probabilistic event selection
+        float rv = Random(seed);
+        float refl = saturate(payload.reflectance);
+        float trans = saturate(payload.transmittance);
+        
+        if (rv < refl)
         {
-            throughput *= payload.reflectance;
             float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
             currentDir = reflect(currentDir, payload.worldNormal);
             currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;
         }
-        else if (payload.transmittance > 0.5)
+        else if (rv < refl + trans)
         {
-            throughput *= payload.transmittance;
             currentOrigin += currentDir * (payload.hitDistance + RAY_BIAS);
         }
         else
@@ -159,28 +162,22 @@ void IrradianceBakeRayGen()
     float3 origin = bakedPos.xyz;
     float3 normal = normalize(bakedNormal.xyz);
     
-    // Seed for random numbers
+    // Global seed
     uint seed = Hash(id.y * dims.x + id.x + _FrameIndex);
 
     float totalIrradiance = 0.0;
 
-    // 1. Direct Sun Sample (Deterministic)
+    // 1. Direct Sun Sample
     float nDotSun = dot(normal, _SunDirection);
     if (nDotSun > 0.0)
     {
-        totalIrradiance += TracePath(origin, _SunDirection, normal);
+        totalIrradiance += TracePath(origin, _SunDirection, normal, seed, true) * nDotSun;
     }
 
-    // 2. Random Hemisphere Sample (Indirect Light)
-    // pdf of cosine-weighted sampling = nDotL / PI
-    // estimator = f * nDotL / pdf = f * PI
+    // 2. Random Hemisphere Sample
     float3 randomDir = GetCosineWeightedDirection(normal, seed);
-    totalIrradiance += TracePath(origin, randomDir, normal) * PI;
+    totalIrradiance += TracePath(origin, randomDir, normal, seed, false) * PI;
 
-    // Average the samples (1 sun, 1 random)
-    // Actually, in NEE, the sun sample is an analytic integration of the sun disk delta,
-    // and the hemisphere sample is the rest of the sky. We sum them.
-    
     _DoseMap[id] += (totalIrradiance * _DeltaHours);
 }
 
@@ -201,7 +198,14 @@ void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttribu
 
     uint instanceId = InstanceID();
     uint primId = PrimitiveIndex();
+    
+    // Use GeometryIndex() if supported, otherwise assume 0 for maximum compatibility
+    // In many Unity setups, simple artifacts only have 1 geometry per instance.
     uint geomId = 0; 
+    #if __SHADER_TARGET__ >= 65
+    geomId = GeometryIndex();
+    #endif
+
     float3 geomNormal = float3(0, 1, 0);
 
     if (instanceId < _MaterialCount)
@@ -210,24 +214,31 @@ void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttribu
         payload.reflectance = saturate(materialData.x);
         payload.transmittance = saturate(materialData.y);
 
-        uint metaIndex = instanceId * MAX_SUBMESHES + geomId;
-        MeshMetadata meta = _MeshMetadata[metaIndex];
+        if (geomId < MAX_SUBMESHES)
+        {
+            uint metaIndex = instanceId * MAX_SUBMESHES + geomId;
+            MeshMetadata meta = _MeshMetadata[metaIndex];
 
-        uint i0 = _GlobalIndices[meta.indexOffset + primId * 3 + 0];
-        uint i1 = _GlobalIndices[meta.indexOffset + primId * 3 + 1];
-        uint i2 = _GlobalIndices[meta.indexOffset + primId * 3 + 2];
+            if (meta.hasGeometry > 0)
+            {
+                uint i0 = _GlobalIndices[meta.indexOffset + primId * 3 + 0];
+                uint i1 = _GlobalIndices[meta.indexOffset + primId * 3 + 1];
+                uint i2 = _GlobalIndices[meta.indexOffset + primId * 3 + 2];
 
-        float3 v0 = _GlobalVertices[meta.vertexOffset + i0];
-        float3 v1 = _GlobalVertices[meta.vertexOffset + i1];
-        float3 v2 = _GlobalVertices[meta.vertexOffset + i2];
+                // GlobalVertices is now float4 for memory alignment
+                float3 v0 = _GlobalVertices[meta.vertexOffset + i0].xyz;
+                float3 v1 = _GlobalVertices[meta.vertexOffset + i1].xyz;
+                float3 v2 = _GlobalVertices[meta.vertexOffset + i2].xyz;
 
-        float3x4 o2w = ObjectToWorld3x4();
-        float3 wv0 = mul(o2w, float4(v0, 1.0));
-        float3 wv1 = mul(o2w, float4(v1, 1.0));
-        float3 wv2 = mul(o2w, float4(v2, 1.0));
+                float3x4 o2w = ObjectToWorld3x4();
+                float3 wv0 = mul(o2w, float4(v0, 1.0));
+                float3 wv1 = mul(o2w, float4(v1, 1.0));
+                float3 wv2 = mul(o2w, float4(v2, 1.0));
 
-        geomNormal = normalize(cross(wv1 - wv0, wv2 - wv0));
-        if (dot(geomNormal, WorldRayDirection()) > 0.0) geomNormal = -geomNormal;
+                geomNormal = normalize(cross(wv1 - wv0, wv2 - wv0));
+                if (dot(geomNormal, WorldRayDirection()) > 0.0) geomNormal = -geomNormal;
+            }
+        }
     }
     payload.worldNormal = geomNormal;
 }
