@@ -5,18 +5,18 @@
 
 ## Completed Features
 - **UV Space Baker:** Fixed Z-clipping (Z=0.5) and Y-axis inversion for HDRP/DX12 RenderTextures.
-- **Raytracing Kernels:** Implemented a high-performance visibility-only shadow ray pattern in `IrradianceBake.raytrace`.
-- **Automatic RTAS:** `IrradianceBaker.cs` now automatically builds the acceleration structure for all scene renderers.
+- **Monte Carlo Path Tracer:** Implemented a stochastic RayGen kernel with Next Event Estimation (NEE) for unified direct and indirect light calculation.
+- **Hemisphere Sampling:** Cosine-weighted importance sampling for accurate ambient skylight and diffuse interreflection.
+- **Geometric Normal Pipeline:** C# geometry scraper and GPU-side normal reconstruction from vertex/index buffers to support accurate specular reflections.
 - **Material-Aware Dosimetry:** Added `SimulationMaterial` component and `_SimulationMaterials` GPU buffer to handle reflectance and transmittance.
 - **Deterministic Simulation:** Implemented deterministic renderer sorting to ensure stable InstanceID-to-Material mapping.
 - **Accumulation Loop:** `LightDoseSimulator.cs` handles time-stepping and additive dose accumulation.
 - **Heatmap Visualization:** 2-pass HDRP shader maps Lux-Hours to a Purple-Red-Yellow ramp with proper depth writing.
 
 ## Immediate Next Steps
-1. **Indirect Bounces:** Implement multi-bounce path tracing (Reflections/Glass) using the material data now available on the GPU.
-2. **Sky Model:** Integrate the Perez Sky Model into the Miss Shader for accurate ambient skylight dosimetry.
-3. **Calibration:** Validate the `maxExposureLimit` against actual conservation standards for specific materials (e.g., pigments, paper).
-4. **UI/UX:** Create a centralized Editor Window to manage bakes and simulations without manual context-menu clicks.
+1. **Sky Model:** Integrate the Perez Sky Model into the Miss Shader for accurate ambient skylight dosimetry.
+2. **Calibration:** Validate the `maxExposureLimit` against actual conservation standards for specific materials (e.g., pigments, paper).
+3. **UI/UX:** Create a centralized Editor Window to manage bakes and simulations without manual context-menu clicks.
 
 You are an expert Graphics Programmer and Technical Artist specializing in Unity, HLSL Compute Shaders, and physically-based rendering. You are assisting with a CS Diploma project: a "Heritage Digital Twin".
 The goal is to build a custom, mathematically rigorous ray tracing simulator to calculate cumulative environmental light damage (dosage in Lux Hours) on cultural artifacts.

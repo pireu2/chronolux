@@ -1,19 +1,38 @@
 #pragma max_recursion_depth 1
 #pragma raytracing IrradianceBakeRayGen
 
+// ── INPUTS ───────────────────────────────────────────────────────────────────
 Texture2D<float4> _PositionMap;
 Texture2D<float4> _NormalMap;
+
 float3 _SunDirection;
 float _BeamLux;
 float _DeltaHours;
 uint _MaterialCount;
+uint _FrameIndex;
+
 RWTexture2D<float> _DoseMap;
 RaytracingAccelerationStructure _SceneRTAS;
+
+// Material properties
 StructuredBuffer<float4> _SimulationMaterials;
 
-static const uint MAX_TRANSMISSIVE_LAYERS = 8;
+// Geometry data for true normals
+struct MeshMetadata
+{
+    uint vertexOffset;
+    uint indexOffset;
+};
+
+StructuredBuffer<float3> _GlobalVertices;
+StructuredBuffer<uint> _GlobalIndices;
+StructuredBuffer<MeshMetadata> _MeshMetadata;
+
+static const uint MAX_BOUNCES = 4; // Reduced for performance during sampling
 static const float RAY_BIAS = 0.002;
 static const float MIN_VISIBILITY = 1e-4;
+static const uint MAX_SUBMESHES = 8;
+static const float PI = 3.14159265359;
 
 struct Payload
 {
@@ -21,71 +40,148 @@ struct Payload
     float reflectance;
     float transmittance;
     float hitDistance;
+    float3 worldNormal;
 };
 
-[shader("raygeneration")]
-void IrradianceBakeRayGen()
+// ── RANDOM NUMBER GENERATION ────────────────────────────────────────────────
+uint Hash(uint x)
 {
-    uint2 id = DispatchRaysIndex().xy;
-    float4 pos = _PositionMap[id];
-    float4 nrm = _NormalMap[id];
-    
-    if (pos.w == 0.0 || length(nrm.xyz) < 0.1) return;
-    
-    float3 normal = normalize(nrm.xyz);
-    float nDotL = dot(normal, _SunDirection);
-    if (nDotL <= 0) return;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x;
+}
 
-    float visibility = 1.0;
-    float3 currentOrigin = pos.xyz + normal * RAY_BIAS;
-    bool reachedSky = false;
+float Random(inout uint state)
+{
+    state = Hash(state);
+    return (float)state / 4294967296.0;
+}
+
+// ── SAMPLING ────────────────────────────────────────────────────────────────
+float3 GetCosineWeightedDirection(float3 normal, inout uint seed)
+{
+    float u1 = Random(seed);
+    float u2 = Random(seed);
+
+    float r = sqrt(u1);
+    float theta = 2.0 * PI * u2;
+
+    float x = r * cos(theta);
+    float y = r * sin(theta);
+    float z = sqrt(max(0.0, 1.0 - u1));
+
+    // Create tangent space
+    float3 up = abs(normal.z) < 0.999 ? float3(0, 0, 1) : float3(1, 0, 0);
+    float3 tangent = normalize(cross(up, normal));
+    float3 bitangent = cross(normal, tangent);
+
+    return tangent * x + bitangent * y + normal * z;
+}
+
+// ── UTILS ────────────────────────────────────────────────────────────────────
+float EvaluateSky(float3 direction)
+{
+    // Sun disk check
+    if (dot(direction, _SunDirection) > 0.9998) 
+    {
+        return _BeamLux;
+    }
+    
+    // Ambient skylight gradient
+    float t = saturate(direction.y * 0.5 + 0.5);
+    return lerp(2000.0, 10000.0, t);
+}
+
+// ── PATH TRACING ────────────────────────────────────────────────────────────
+float TracePath(float3 origin, float3 direction, float3 surfaceNormal)
+{
+    float throughput = 1.0;
+    float3 currentOrigin = origin + surfaceNormal * RAY_BIAS;
+    float3 currentDir = direction;
 
     [loop]
-    for (uint layer = 0; layer < MAX_TRANSMISSIVE_LAYERS; layer++)
+    for (uint bounce = 0; bounce < MAX_BOUNCES; bounce++)
     {
         RayDesc ray;
         ray.Origin = currentOrigin;
-        ray.Direction = _SunDirection;
+        ray.Direction = currentDir;
         ray.TMin = 0.001;
-        ray.TMax = 100000.0;
+        ray.TMax = 10000.0;
 
         Payload payload;
         payload.isOccluded = true;
         payload.reflectance = 0.0;
         payload.transmittance = 0.0;
         payload.hitDistance = 0.0;
+        payload.worldNormal = float3(0, 1, 0);
 
-        // RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH (0x1) | RAY_FLAG_FORCE_OPAQUE (0x4)
-        TraceRay(_SceneRTAS, 0x5, 0xFF, 0, 1, 0, ray, payload);
+        TraceRay(_SceneRTAS, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 1, 0, ray, payload);
 
         if (!payload.isOccluded)
         {
-            reachedSky = true;
-            break;
+            return EvaluateSky(currentDir) * throughput;
         }
 
-        float layerTransmittance = saturate(payload.transmittance);
-        visibility *= layerTransmittance;
-
-        if (layerTransmittance <= MIN_VISIBILITY || visibility <= MIN_VISIBILITY)
+        if (payload.reflectance > 0.5)
         {
-            visibility = 0.0;
-            break;
+            throughput *= payload.reflectance;
+            float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
+            currentDir = reflect(currentDir, payload.worldNormal);
+            currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;
+        }
+        else if (payload.transmittance > 0.5)
+        {
+            throughput *= payload.transmittance;
+            currentOrigin += currentDir * (payload.hitDistance + RAY_BIAS);
+        }
+        else
+        {
+            return 0.0;
         }
 
-        currentOrigin += _SunDirection * max(payload.hitDistance + RAY_BIAS, RAY_BIAS);
+        if (throughput <= MIN_VISIBILITY) break;
+    }
+    return 0.0;
+}
+
+// ── RAY GENERATION ──────────────────────────────────────────────────────────
+[shader("raygeneration")]
+void IrradianceBakeRayGen()
+{
+    uint2 id = DispatchRaysIndex().xy;
+    uint2 dims = DispatchRaysDimensions().xy;
+    float4 bakedPos = _PositionMap[id];
+    float4 bakedNormal = _NormalMap[id];
+    
+    if (bakedPos.w == 0.0 || length(bakedNormal.xyz) < 0.1) return;
+    
+    float3 origin = bakedPos.xyz;
+    float3 normal = normalize(bakedNormal.xyz);
+    
+    // Seed for random numbers
+    uint seed = Hash(id.y * dims.x + id.x + _FrameIndex);
+
+    float totalIrradiance = 0.0;
+
+    // 1. Direct Sun Sample (Deterministic)
+    float nDotSun = dot(normal, _SunDirection);
+    if (nDotSun > 0.0)
+    {
+        totalIrradiance += TracePath(origin, _SunDirection, normal);
     }
 
-    if (!reachedSky)
-    {
-        // A non-escaped shadow ray means we hit the layer budget before clear LOS.
-        visibility = 0.0;
-    }
+    // 2. Random Hemisphere Sample (Indirect Light)
+    // pdf of cosine-weighted sampling = nDotL / PI
+    // estimator = f * nDotL / pdf = f * PI
+    float3 randomDir = GetCosineWeightedDirection(normal, seed);
+    totalIrradiance += TracePath(origin, randomDir, normal) * PI;
 
-    if (visibility > 0.0)
-    {
-        _DoseMap[id] += _BeamLux * nDotL * _DeltaHours * visibility;
-    }
+    // Average the samples (1 sun, 1 random)
+    // Actually, in NEE, the sun sample is an analytic integration of the sun disk delta,
+    // and the hemisphere sample is the rest of the sky. We sum them.
+    
+    _DoseMap[id] += (totalIrradiance * _DeltaHours);
 }
 
 [shader("miss")]
@@ -101,15 +197,37 @@ void MissMain(inout Payload payload)
 void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
     payload.isOccluded = true;
-    payload.reflectance = 0.0;
-    payload.transmittance = 0.0;
     payload.hitDistance = RayTCurrent();
 
-    uint materialIndex = InstanceID();
-    if (materialIndex < _MaterialCount)
+    uint instanceId = InstanceID();
+    uint primId = PrimitiveIndex();
+    uint geomId = 0; 
+    float3 geomNormal = float3(0, 1, 0);
+
+    if (instanceId < _MaterialCount)
     {
-        float4 materialData = _SimulationMaterials[materialIndex];
+        float4 materialData = _SimulationMaterials[instanceId];
         payload.reflectance = saturate(materialData.x);
         payload.transmittance = saturate(materialData.y);
+
+        uint metaIndex = instanceId * MAX_SUBMESHES + geomId;
+        MeshMetadata meta = _MeshMetadata[metaIndex];
+
+        uint i0 = _GlobalIndices[meta.indexOffset + primId * 3 + 0];
+        uint i1 = _GlobalIndices[meta.indexOffset + primId * 3 + 1];
+        uint i2 = _GlobalIndices[meta.indexOffset + primId * 3 + 2];
+
+        float3 v0 = _GlobalVertices[meta.vertexOffset + i0];
+        float3 v1 = _GlobalVertices[meta.vertexOffset + i1];
+        float3 v2 = _GlobalVertices[meta.vertexOffset + i2];
+
+        float3x4 o2w = ObjectToWorld3x4();
+        float3 wv0 = mul(o2w, float4(v0, 1.0));
+        float3 wv1 = mul(o2w, float4(v1, 1.0));
+        float3 wv2 = mul(o2w, float4(v2, 1.0));
+
+        geomNormal = normalize(cross(wv1 - wv0, wv2 - wv0));
+        if (dot(geomNormal, WorldRayDirection()) > 0.0) geomNormal = -geomNormal;
     }
+    payload.worldNormal = geomNormal;
 }
