@@ -1,8 +1,12 @@
 using UnityEngine;
+using System.Collections.Generic;
 
 [AddComponentMenu("ChronoLux/Virtual Lux Sensor")]
 public class VirtualLuxSensor : MonoBehaviour
 {
+    // Static registration to avoid FindObjectsByType allocations
+    public static readonly List<VirtualLuxSensor> AllSensors = new List<VirtualLuxSensor>();
+
     [Header("Validation Data")]
     [ReadOnly, SerializeField] private float simulatedLux;
     [ReadOnly, SerializeField] private float theoreticalLux;
@@ -12,32 +16,20 @@ public class VirtualLuxSensor : MonoBehaviour
     public bool showGizmo = true;
     public Color gizmoColor = Color.cyan;
 
-    /// <summary>
-    /// Updates the simulated Lux value received from the GPU.
-    /// Also computes the theoretical value for comparison.
-    /// </summary>
+    private void OnEnable() => AllSensors.Add(this);
+    private void OnDisable() => AllSensors.Remove(this);
+
     public void UpdateReadings(float lux, Vector3 sunDir, float beamLux, float diffuseLux)
     {
         simulatedLux = lux;
-
-        // --- THEORETICAL VALIDATION ---
-        // Formula: E_total = Beam * cos(theta) + Diffuse_Factor
-        // We assume a simple hemisphere factor for clear-sky diffuse (0.5 * diffuseLux) 
-        // for vertical/random orientations, but the exact comparison depends on the Perez integral.
         float nDotL = Mathf.Max(0, Vector3.Dot(transform.up, sunDir));
         float direct = beamLux * nDotL;
-        
-        // Simple theoretical approximation for validation
         theoreticalLux = direct + (diffuseLux * 0.5f); 
 
         if (theoreticalLux > 1e-3f)
-        {
             errorPercent = ((simulatedLux - theoreticalLux) / theoreticalLux) * 100f;
-        }
         else
-        {
             errorPercent = 0f;
-        }
     }
 
     public float SimulatedLux => simulatedLux;
@@ -45,7 +37,6 @@ public class VirtualLuxSensor : MonoBehaviour
     private void OnDrawGizmos()
     {
         if (!showGizmo) return;
-        
         Gizmos.color = gizmoColor;
         Gizmos.DrawWireSphere(transform.position, 0.05f);
         Gizmos.DrawRay(transform.position, transform.up * 0.2f);

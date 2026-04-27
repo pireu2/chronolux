@@ -18,8 +18,8 @@ public class IrradianceBaker : MonoBehaviour
     [StructLayout(LayoutKind.Sequential)]
     private struct SensorInput
     {
-        public Vector4 position; // float4 for 16-byte alignment
-        public Vector4 normal;   // float4 for 16-byte alignment
+        public Vector4 position; 
+        public Vector4 normal;   
     }
 
     private const int MAX_SUBMESHES = 8;
@@ -32,7 +32,6 @@ public class IrradianceBaker : MonoBehaviour
     [Range(0f, 1f)] public float defaultReflectance = 0.8f;
     [Range(0f, 1f)] public float defaultTransmittance = 0.0f;
 
-    // State
     private RenderTexture _doseMap;
     private RayTracingAccelerationStructure _rtas;
     private ComputeBuffer _simulationMaterialBuffer;
@@ -40,15 +39,14 @@ public class IrradianceBaker : MonoBehaviour
     private ComputeBuffer _indexBuffer;
     private ComputeBuffer _metadataBuffer;
 
-    // Sensor State
     private ComputeBuffer _sensorInputBuffer;
     private ComputeBuffer _sensorOutputBuffer;
-    private List<VirtualLuxSensor> _activeSensors = new List<VirtualLuxSensor>();
+    private SensorInput[] _cachedSensorInputs;
+    private float[] _cachedZeros;
 
     private int _materialCount;
     private bool _isInitialized = false;
 
-    // Cache Property IDs
     private static readonly int _ID_PositionMap = Shader.PropertyToID("_PositionMap");
     private static readonly int _ID_NormalMap = Shader.PropertyToID("_NormalMap");
     private static readonly int _ID_DoseMap = Shader.PropertyToID("_DoseMap");
@@ -164,32 +162,34 @@ public class IrradianceBaker : MonoBehaviour
         if (!_isInitialized || positionMap == null || normalMap == null) return;
         if (sunDirection.sqrMagnitude <= 1e-8f) return;
 
+        Camera cam = Camera.main ?? GetComponent<Camera>();
+        if (cam == null) return; // Early exit before CommandBuffer allocation
+
         _frameIndex++;
         sunDirection.Normalize();
 
         // 1. DYNAMIC SENSOR UPDATE
-        var sensorsInScene = FindObjectsByType<VirtualLuxSensor>(FindObjectsSortMode.None);
-        _activeSensors.Clear(); _activeSensors.AddRange(sensorsInScene);
+        var sensors = VirtualLuxSensor.AllSensors;
+        int sensorCount = sensors.Count;
 
-        if (_activeSensors.Count > 0) {
-            if (_sensorInputBuffer == null || _sensorInputBuffer.count != _activeSensors.Count) {
+        if (sensorCount > 0) {
+            if (_sensorInputBuffer == null || _sensorInputBuffer.count != sensorCount) {
                 if (_sensorInputBuffer != null) _sensorInputBuffer.Release();
                 if (_sensorOutputBuffer != null) _sensorOutputBuffer.Release();
-                _sensorInputBuffer = new ComputeBuffer(_activeSensors.Count, Marshal.SizeOf<SensorInput>());
-                _sensorOutputBuffer = new ComputeBuffer(_activeSensors.Count, sizeof(float));
+                _sensorInputBuffer = new ComputeBuffer(sensorCount, Marshal.SizeOf<SensorInput>());
+                _sensorOutputBuffer = new ComputeBuffer(sensorCount, sizeof(float));
+                _cachedSensorInputs = new SensorInput[sensorCount];
+                _cachedZeros = new float[sensorCount];
             }
-            SensorInput[] inputs = new SensorInput[_activeSensors.Count];
-            for (int i = 0; i < _activeSensors.Count; i++) {
-                inputs[i] = new SensorInput { 
-                    position = new Vector4(_activeSensors[i].transform.position.x, _activeSensors[i].transform.position.y, _activeSensors[i].transform.position.z, 1.0f),
-                    normal = new Vector4(_activeSensors[i].transform.up.x, _activeSensors[i].transform.up.y, _activeSensors[i].transform.up.z, 0.0f)
+            
+            for (int i = 0; i < sensorCount; i++) {
+                _cachedSensorInputs[i] = new SensorInput { 
+                    position = (Vector4)sensors[i].transform.position + new Vector4(0,0,0,1),
+                    normal = (Vector4)sensors[i].transform.up
                 };
             }
-            _sensorInputBuffer.SetData(inputs);
-            
-            // Clear output buffer to prevent stale data/garbage
-            float[] zeros = new float[_activeSensors.Count];
-            _sensorOutputBuffer.SetData(zeros);
+            _sensorInputBuffer.SetData(_cachedSensorInputs);
+            _sensorOutputBuffer.SetData(_cachedZeros);
         }
 
         var cmd = new CommandBuffer { name = "Dispatch ChronoLux" };
@@ -206,10 +206,6 @@ public class IrradianceBaker : MonoBehaviour
             cmd.SetRayTracingIntParam(s, _ID_FrameIndex, (int)_frameIndex);
         }
 
-        Camera cam = Camera.main ?? GetComponent<Camera>();
-        if (cam == null) return;
-
-        // 2. ARTIFACT BAKE
         SetCommon(rayTracingShader);
         cmd.SetRayTracingTextureParam(rayTracingShader, _ID_PositionMap, positionMap);
         cmd.SetRayTracingTextureParam(rayTracingShader, _ID_NormalMap, normalMap);
@@ -217,24 +213,26 @@ public class IrradianceBaker : MonoBehaviour
         cmd.SetRayTracingFloatParam(rayTracingShader, _ID_DeltaHours, deltaHours);
         cmd.DispatchRays(rayTracingShader, "IrradianceBakeRayGen", (uint)_doseMap.width, (uint)_doseMap.height, 1, cam);
 
-        // 3. SENSOR BAKE
-        if (sensorShader != null && _activeSensors.Count > 0) {
+        if (sensorShader != null && sensorCount > 0) {
             SetCommon(sensorShader);
             cmd.SetRayTracingBufferParam(sensorShader, _ID_SensorInputs, _sensorInputBuffer);
             cmd.SetRayTracingBufferParam(sensorShader, _ID_SensorOutputs, _sensorOutputBuffer);
-            cmd.DispatchRays(sensorShader, "SensorBakeRayGen", (uint)_activeSensors.Count, 1, 1, cam);
+            cmd.DispatchRays(sensorShader, "SensorBakeRayGen", (uint)sensorCount, 1, 1, cam);
         }
 
         Graphics.ExecuteCommandBuffer(cmd);
         cmd.Release();
 
-        // 4. READBACK
-        if (_activeSensors.Count > 0) {
+        // 2. STABLE READBACK (Capture snapshot to avoid closure race conditions)
+        if (sensorCount > 0) {
+            var snapshot = sensors.ToArray();
             AsyncGPUReadback.Request(_sensorOutputBuffer, (req) => {
                 if (req.hasError) return;
                 var data = req.GetData<float>();
-                for (int i = 0; i < _activeSensors.Count; i++) if (i < data.Length && _activeSensors[i] != null) 
-                    _activeSensors[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
+                for (int i = 0; i < snapshot.Length; i++) {
+                    if (i < data.Length && snapshot[i] != null) 
+                        snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
+                }
             });
         }
     }
