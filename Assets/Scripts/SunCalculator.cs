@@ -29,8 +29,13 @@ public static class SunCalculator
 
         // Estimated clear-sky beam irradiance in Lux —
         // i.e. the illuminance on a surface facing directly toward the sun.
-        // Multiply by dot(surfaceNormal, sunDirection) to get the actual irradiance on a tilted surface.
         public float BeamLux;
+
+        // Estimated clear-sky diffuse irradiance in Lux —
+        // i.e. the total light from the blue sky on a horizontal surface.
+        // REFERENCE — Haurwitz clear-sky diffuse model, as tabulated in:
+        //   Iqbal, M. (1983). "An Introduction to Solar Radiation." Academic Press, Chapter 11.
+        public float DiffuseLux;
 
         public bool IsAboveHorizon => AltitudeDeg > 0f;
     }
@@ -134,7 +139,8 @@ public static class SunCalculator
         {
             AzimuthDeg = (float)az,
             AltitudeDeg = (float)altDeg,
-            BeamLux = ClearSkyBeamLux((float)altDeg)
+            BeamLux = ClearSkyBeamLux((float)altDeg),
+            DiffuseLux = ClearSkyDiffuseLux((float)altDeg)
         };
     }
 
@@ -227,6 +233,22 @@ public static class SunCalculator
         // Beam irradiance perpendicular to sun rays
         // E0 = 127,500 Lux (solar constant in luminous flux terms)
         return 127500f * Mathf.Pow(0.7f, Mathf.Pow(airMass, 0.678f));
+    }
+
+    // Estimated clear-sky diffuse irradiance (Lux) on a horizontal surface.
+    // REFERENCE — Haurwitz clear-sky diffuse model:
+    //   Iqbal, M. (1983). "An Introduction to Solar Radiation." Chapter 11.
+    private static float ClearSkyDiffuseLux(float altitudeDeg)
+    {
+        if (altitudeDeg <= 0f) return 0f;
+
+        float altRad = altitudeDeg * Mathf.Deg2Rad;
+        // The scattered component of the atmosphere. 
+        // For clear skies, Diffuse is approx 10-15% of the total potential irradiance.
+        float totalPotential = 127500f * Mathf.Sin(altRad);
+        float directHorizontal = ClearSkyBeamLux(altitudeDeg) * Mathf.Sin(altRad);
+        
+        return Mathf.Max(0f, 0.3f * (totalPotential - directHorizontal));
     }
 
     // REFERENCE — Julian Day Number formula (Chapter 7, pp. 60-61):

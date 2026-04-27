@@ -1,5 +1,5 @@
 #pragma max_recursion_depth 1
-#pragma raytracing IrradianceBakeRayGen
+#pragma raytracing SensorBakeRayGen
 
 #include "Includes/Common.hlsl"
 #include "Includes/Random.hlsl"
@@ -8,20 +8,24 @@
 #include "Includes/Geometry.hlsl"
 
 // ── INPUTS ───────────────────────────────────────────────────────────────────
-Texture2D<float4> _PositionMap;
-Texture2D<float4> _NormalMap;
+struct SensorInput
+{
+    float4 position; // float4 for 16-byte alignment
+    float4 normal;   // float4 for 16-byte alignment
+};
 
+StructuredBuffer<SensorInput> _SensorInputs;
 float3 _SunDirection;
 float _BeamLux;
 float _DiffuseLux;
-float _DeltaHours;
-uint _MaterialCount;
 uint _FrameIndex;
+uint _MaterialCount;
 
-RWTexture2D<float> _DoseMap;
+// OUTPUT
+RWStructuredBuffer<float> _SensorOutputs;
+
+// SHARED BUFFERS
 RaytracingAccelerationStructure _SceneRTAS;
-
-// Material and Geometry Buffers
 StructuredBuffer<float4> _SimulationMaterials;
 StructuredBuffer<float4> _GlobalVertices; 
 StructuredBuffer<uint> _GlobalIndices;
@@ -29,19 +33,15 @@ StructuredBuffer<MeshMetadata> _MeshMetadata;
 
 // ── RAY GENERATION ──────────────────────────────────────────────────────────
 [shader("raygeneration")]
-void IrradianceBakeRayGen()
+void SensorBakeRayGen()
 {
-    uint2 id = DispatchRaysIndex().xy;
-    uint2 dims = DispatchRaysDimensions().xy;
-    float4 bakedPos = _PositionMap[id];
-    float4 bakedNormal = _NormalMap[id];
+    uint id = DispatchRaysIndex().x;
+    SensorInput input = _SensorInputs[id];
     
-    if (bakedPos.w == 0.0 || length(bakedNormal.xyz) < 0.1) return;
+    float3 origin = input.position.xyz;
+    float3 normal = normalize(input.normal.xyz);
     
-    float3 origin = bakedPos.xyz;
-    float3 normal = normalize(bakedNormal.xyz);
-    
-    uint seed = Hash(id.y * dims.x + id.x + _FrameIndex);
+    uint seed = Hash(id + _FrameIndex);
     float totalIrradiance = 0.0;
 
     // 1. Direct Sun Sample
@@ -55,7 +55,7 @@ void IrradianceBakeRayGen()
     float3 randomDir = GetCosineWeightedDirection(normal, seed, PI);
     totalIrradiance += TracePath(origin, randomDir, normal, seed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * PI;
 
-    _DoseMap[id] += (totalIrradiance * _DeltaHours);
+    _SensorOutputs[id] = totalIrradiance;
 }
 
 [shader("miss")]
@@ -80,10 +80,8 @@ void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttribu
     geomId = GeometryIndex();
     #endif
 
-    // 1. Reconstruct Geometric Normal
     payload.worldNormal = ReconstructGeometricNormal(instanceId, primId, geomId, _GlobalVertices, _GlobalIndices, _MeshMetadata);
 
-    // 2. Fetch Material Data
     payload.reflectance = 0.0;
     payload.transmittance = 0.0;
     if (instanceId < _MaterialCount)

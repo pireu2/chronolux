@@ -6,6 +6,8 @@
 ## Completed Features
 - **UV Space Baker:** Fixed Z-clipping (Z=0.5) and Y-axis inversion for HDRP/DX12 RenderTextures.
 - **Monte Carlo Path Tracer:** Implemented a stochastic RayGen kernel with Next Event Estimation (NEE) for unified direct and indirect light calculation.
+- **Perez Sky Model:** Integrated the Perez All-Weather Model (T=2.0) for scientifically accurate ambient skylight distribution.
+- **Digital Light Sensors:** Implemented real-time virtual Lux meters with point-probe RayGen and theoretical validation for metrology verification.
 - **Hemisphere Sampling:** Cosine-weighted importance sampling for accurate ambient skylight and diffuse interreflection.
 - **Geometric Normal Pipeline:** C# geometry scraper and GPU-side normal reconstruction from vertex/index buffers to support accurate specular reflections.
 - **Material-Aware Dosimetry:** Added `SimulationMaterial` component and `_SimulationMaterials` GPU buffer to handle reflectance and transmittance.
@@ -14,9 +16,9 @@
 - **Heatmap Visualization:** 2-pass HDRP shader maps Lux-Hours to a Purple-Red-Yellow ramp with proper depth writing.
 
 ## Immediate Next Steps
-1. **Sky Model:** Integrate the Perez Sky Model into the Miss Shader for accurate ambient skylight dosimetry.
-2. **Calibration:** Validate the `maxExposureLimit` against actual conservation standards for specific materials (e.g., pigments, paper).
-3. **UI/UX:** Create a centralized Editor Window to manage bakes and simulations without manual context-menu clicks.
+1. **Heatmap Calibration:** Update the visualization shader to use a calibrated Color Ramp (Purple-Blue-Red-Yellow) based on actual Lux-Hour thresholds.
+2. **UI/UX:** Create a centralized Editor Window to manage bakes and simulations without manual context-menu clicks.
+3. **Data Export:** Support exporting baked DoseMaps as high-dynamic-range .exr files for external analysis.
 
 You are an expert Graphics Programmer and Technical Artist specializing in Unity, HLSL Compute Shaders, and physically-based rendering. You are assisting with a CS Diploma project: a "Heritage Digital Twin".
 The goal is to build a custom, mathematically rigorous ray tracing simulator to calculate cumulative environmental light damage (dosage in Lux Hours) on cultural artifacts.
