@@ -70,6 +70,9 @@ public class LightDoseSimulator : MonoBehaviour
     // Beam irradiance in Lux for the current step (perpendicular to sun rays).
     public float CurrentBeamLux { get; private set; }
 
+    // Diffuse horizontal irradiance in Lux for the current step (skylight).
+    public float CurrentDiffuseLux { get; private set; }
+
     // Duration of the current time step in hours (for dose = lux × Δt).
     public float CurrentDeltaHours { get; private set; }
 
@@ -112,7 +115,7 @@ public class LightDoseSimulator : MonoBehaviour
 
         // 4. Dispatch a single hour
         // We use the CurrentSunDirection and CurrentBeamLux calculated in ApplySunPosition
-        irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, 1.0f, baker.PositionMap, baker.NormalMap);
+        irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, 1.0f, baker.PositionMap, baker.NormalMap);
 
         // 5. Apply preview to the renderer
         ApplyDosePreview();
@@ -179,7 +182,7 @@ public class LightDoseSimulator : MonoBehaviour
                 // ── 2. Dispatch irradiance accumulator ─────────
                 if (irradianceBaker != null && baker != null && baker.PositionMap != null)
                 {
-                    irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDeltaHours, baker.PositionMap, baker.NormalMap);
+                    irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, CurrentDeltaHours, baker.PositionMap, baker.NormalMap);
                 }
 
                 // ── 3. Yield so the Editor doesn't freeze ────────────────────
@@ -241,6 +244,7 @@ public class LightDoseSimulator : MonoBehaviour
         // Cache for the compute shader
         CurrentSunDirection = sunDir;
         CurrentBeamLux = sun.BeamLux;
+        CurrentDiffuseLux = sun.DiffuseLux;
 
         // Inspector read-outs
         simulatedTime = localTime.ToString("yyyy-MM-dd HH:mm");
