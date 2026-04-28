@@ -396,18 +396,20 @@ MonoBehaviour:
   startDay: 172
   endDay: 172
   stepSeconds: 1800
+  samplesPerPixel: 64
+  minExposureRange: 0
+  maxExposureLimit: 100000
+  criticalLimit: 500000
+  useLogScale: 0
+  shadowVisibility: 0.2
   sunLight: {fileID: 157207113}
   baker: {fileID: 429242158}
   irradianceBaker: {fileID: 183423943}
-  previewRenderer: {fileID: 0}
   previewTextureProperty: _DoseMap
-  maxExposureLimit: 100000
   simulatedTime: "\u2013"
   progressPercent: 0
   completedSteps: 0
-  beamLux: 0
-  azimuthDeg: 0
-  altitudeDeg: 0
+  currentMaxDoseFound: 0
 --- !u!4 &183423942
 Transform:
   m_ObjectHideFlags: 0
@@ -436,7 +438,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::IrradianceBaker
   rayTracingShader: {fileID: 4807578003741378534, guid: ecae26d334832a04ca62f479ebdc322c, type: 3}
-  sensorShader: {fileID: 0}
+  sensorShader: {fileID: 4807578003741378534, guid: b7c26d6db48d3784f8ba482fe25ae09b, type: 3}
+  samplesPerPixel: 64
   defaultReflectance: 0.8
   defaultTransmittance: 0
 --- !u!1001 &297171473

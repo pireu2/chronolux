@@ -17,6 +17,7 @@ float _DiffuseLux;
 float _DeltaHours;
 uint _MaterialCount;
 uint _FrameIndex;
+uint _SamplesPerPixel;
 
 RWTexture2D<float> _DoseMap;
 RaytracingAccelerationStructure _SceneRTAS;
@@ -36,24 +37,34 @@ void IrradianceBakeRayGen()
     float4 bakedPos = _PositionMap[id];
     float4 bakedNormal = _NormalMap[id];
     
-    if (bakedPos.w == 0.0 || length(bakedNormal.xyz) < 0.1) return;
+    if (bakedPos.w < 0.01 || length(bakedNormal.xyz) < 0.1) return;
     
     float3 origin = bakedPos.xyz;
     float3 normal = normalize(bakedNormal.xyz);
+    float3 biasedOrigin = origin + normal * 0.02; // Standard launch bias
     
-    uint seed = Hash(id.y * dims.x + id.x + _FrameIndex);
+    uint baseSeed = Hash(id.y * dims.x + id.x + _FrameIndex);
     float totalIrradiance = 0.0;
-
-    // 1. Direct Sun Sample
     float nDotSun = dot(normal, _SunDirection);
+
+    // 1. Direct Sun
     if (nDotSun > 0.0)
     {
-        totalIrradiance += TracePath(origin, _SunDirection, normal, seed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
+        uint sunSeed = baseSeed;
+        totalIrradiance += TracePath(biasedOrigin, _SunDirection, normal, sunSeed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
     }
 
-    // 2. Random Hemisphere Sample
-    float3 randomDir = GetCosineWeightedDirection(normal, seed, PI);
-    totalIrradiance += TracePath(origin, randomDir, normal, seed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * PI;
+    // 2. Stochastic Multi-Sampling
+    float indirectIrradiance = 0.0;
+    uint numSamples = max(1, _SamplesPerPixel);
+    for (uint i = 0; i < numSamples; i++)
+    {
+        uint sampleSeed = Hash(baseSeed + i);
+        float3 randomDir = GetCosineWeightedDirection(normal, sampleSeed, PI);
+        indirectIrradiance += TracePath(biasedOrigin, randomDir, normal, sampleSeed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux);
+    }
+    
+    totalIrradiance += (indirectIrradiance / (float)numSamples) * PI;
 
     _DoseMap[id] += (totalIrradiance * _DeltaHours);
 }
@@ -61,7 +72,7 @@ void IrradianceBakeRayGen()
 [shader("miss")]
 void MissMain(inout Payload payload)
 {
-    payload.isOccluded = 0; // Miss
+    payload.isOccluded = 0;
     payload.reflectance = 0.0;
     payload.transmittance = 0.0;
     payload.hitDistance = 0.0;
@@ -70,9 +81,8 @@ void MissMain(inout Payload payload)
 [shader("closesthit")]
 void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttributes attribs)
 {
-    payload.isOccluded = 1; // Hit
+    payload.isOccluded = 1;
     payload.hitDistance = RayTCurrent();
-
     uint instanceId = InstanceID();
     uint primId = PrimitiveIndex();
     uint geomId = 0; 
@@ -80,10 +90,8 @@ void ClosestHitMain(inout Payload payload, in BuiltInTriangleIntersectionAttribu
     geomId = GeometryIndex();
     #endif
 
-    // 1. Reconstruct Geometric Normal
     payload.worldNormal = ReconstructGeometricNormal(instanceId, primId, geomId, _GlobalVertices, _GlobalIndices, _MeshMetadata);
-
-    // 2. Fetch Material Data
+    
     payload.reflectance = 0.0;
     payload.transmittance = 0.0;
     if (instanceId < _MaterialCount)

@@ -28,6 +28,9 @@ public class IrradianceBaker : MonoBehaviour
     public RayTracingShader rayTracingShader;
     public RayTracingShader sensorShader;
 
+    [Header("Simulation Fidelity")]
+    [Range(1, 64)] public int samplesPerPixel = 4;
+
     [Header("Fallback Simulation Material")]
     [Range(0f, 1f)] public float defaultReflectance = 0.8f;
     [Range(0f, 1f)] public float defaultTransmittance = 0.0f;
@@ -57,6 +60,7 @@ public class IrradianceBaker : MonoBehaviour
     private static readonly int _ID_DeltaHours = Shader.PropertyToID("_DeltaHours");
     private static readonly int _ID_MaterialCount = Shader.PropertyToID("_MaterialCount");
     private static readonly int _ID_FrameIndex = Shader.PropertyToID("_FrameIndex");
+    private static readonly int _ID_SamplesPerPixel = Shader.PropertyToID("_SamplesPerPixel");
     private static readonly int _ID_SimulationMaterials = Shader.PropertyToID("_SimulationMaterials");
     private static readonly int _ID_MeshMetadata = Shader.PropertyToID("_MeshMetadata");
     private static readonly int _ID_GlobalVertices = Shader.PropertyToID("_GlobalVertices");
@@ -69,34 +73,6 @@ public class IrradianceBaker : MonoBehaviour
     private void OnValidate() => ClampEnergy(ref defaultReflectance, ref defaultTransmittance);
     private static void ClampEnergy(ref float r, ref float t) { r = Mathf.Clamp01(r); t = Mathf.Clamp01(t); float s = r + t; if (s > 1f) { r /= s; t /= s; } }
 
-    private struct RendererSortEntry { public Renderer renderer; public string sortKey; }
-    private static string BuildTransformSortKey(Transform t) {
-        if (t == null) return string.Empty;
-        var s = new List<string>(8);
-        while (t != null) { s.Add($"{t.GetSiblingIndex():D6}:{t.name}"); t = t.parent; }
-        s.Reverse(); return string.Join("/", s);
-    }
-    private static string BuildRendererSortKey(Renderer r) {
-        if (r == null) return string.Empty;
-        string p = r.gameObject.scene.path ?? string.Empty;
-        string h = BuildTransformSortKey(r.transform);
-        int s = 0; Renderer[] sib = r.GetComponents<Renderer>();
-        for (int i = 0; i < sib.Length; i++) if (ReferenceEquals(sib[i], r)) { s = i; break; }
-        return $"{p}|{h}|{r.GetType().FullName}|{s:D4}";
-    }
-
-    private void ResolveSimulationMaterial(Renderer renderer, out float reflectance, out float transmittance) {
-        reflectance = defaultReflectance; transmittance = defaultTransmittance;
-        var sim = renderer.GetComponent<SimulationMaterial>();
-        if (sim != null) { sim.GetClampedScalars(out reflectance, out transmittance); return; }
-        Material m = renderer.sharedMaterial;
-        if (m != null) {
-            if (m.HasProperty("_Reflectance")) reflectance = m.GetFloat("_Reflectance");
-            if (m.HasProperty("_Transmittance")) transmittance = m.GetFloat("_Transmittance");
-        }
-        ClampEnergy(ref reflectance, ref transmittance);
-    }
-
     public void Initialize(int width, int height)
     {
         if (!SystemInfo.supportsRayTracing || rayTracingShader == null) return;
@@ -104,9 +80,10 @@ public class IrradianceBaker : MonoBehaviour
         _rtas = new RayTracingAccelerationStructure();
 
         Renderer[] all = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
-        var sorted = new List<RendererSortEntry>(all.Length);
-        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) sorted.Add(new RendererSortEntry { renderer = r, sortKey = BuildRendererSortKey(r) });
-        sorted.Sort((a, b) => string.CompareOrdinal(a.sortKey, b.sortKey));
+        var sorted = new List<Renderer>(all.Length);
+        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) sorted.Add(r);
+        // Sort by instance ID for stability
+        sorted.Sort((a, b) => a.GetInstanceID().CompareTo(b.GetInstanceID()));
 
         var mats = new List<Vector4>(sorted.Count);
         var verts = new List<Vector4>(); 
@@ -114,7 +91,7 @@ public class IrradianceBaker : MonoBehaviour
         var metas = new MeshMetadata[Mathf.Max(1, sorted.Count) * MAX_SUBMESHES];
 
         for (int i = 0; i < sorted.Count; i++) {
-            Renderer r = sorted[i].renderer; Mesh mesh = null; int subCount = 1;
+            Renderer r = sorted[i]; Mesh mesh = null; int subCount = 1;
             if (r is MeshRenderer mr) { var mf = mr.GetComponent<MeshFilter>(); if (mf != null) mesh = mf.sharedMesh; }
             else if (r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh;
             if (mesh != null) subCount = mesh.subMeshCount;
@@ -127,7 +104,9 @@ public class IrradianceBaker : MonoBehaviour
                     metas[i * MAX_SUBMESHES + s] = new MeshMetadata { vertexOffset = vOff, indexOffset = iOff, hasGeometry = 1 };
                 }
             }
-            ResolveSimulationMaterial(r, out float refl, out float trans);
+            float refl = defaultReflectance; float trans = defaultTransmittance;
+            var sim = r.GetComponent<SimulationMaterial>();
+            if (sim != null) sim.GetClampedScalars(out refl, out trans);
             mats.Add(new Vector4(refl, trans, 0f, 0f));
             var flags = new RayTracingSubMeshFlags[subCount];
             for (int s = 0; s < subCount; s++) flags[s] = RayTracingSubMeshFlags.Enabled | RayTracingSubMeshFlags.ClosestHitOnly;
@@ -160,28 +139,30 @@ public class IrradianceBaker : MonoBehaviour
     public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, RenderTexture positionMap, RenderTexture normalMap)
     {
         if (!_isInitialized || positionMap == null || normalMap == null) return;
-        if (sunDirection.sqrMagnitude <= 1e-8f) return;
-
-        Camera cam = Camera.main ?? GetComponent<Camera>();
-        if (cam == null) return; // Early exit before CommandBuffer allocation
+        
+        // EDITOR CAMERA FALLBACK
+        Camera cam = Camera.main;
+#if UNITY_EDITOR
+        if (cam == null && UnityEditor.SceneView.lastActiveSceneView != null)
+            cam = UnityEditor.SceneView.lastActiveSceneView.camera;
+#endif
+        if (cam == null) cam = GetComponent<Camera>();
+        if (cam == null) return; // Still no camera found
 
         _frameIndex++;
         sunDirection.Normalize();
 
-        // 1. DYNAMIC SENSOR UPDATE
         var sensors = VirtualLuxSensor.AllSensors;
         int sensorCount = sensors.Count;
-
         if (sensorCount > 0) {
             if (_sensorInputBuffer == null || _sensorInputBuffer.count != sensorCount) {
                 if (_sensorInputBuffer != null) _sensorInputBuffer.Release();
                 if (_sensorOutputBuffer != null) _sensorOutputBuffer.Release();
-                _sensorInputBuffer = new ComputeBuffer(sensorCount, Marshal.SizeOf<SensorInput>());
-                _sensorOutputBuffer = new ComputeBuffer(sensorCount, sizeof(float));
+                _sensorInputBuffer = new ComputeBuffer(sensorCount, 32);
+                _sensorOutputBuffer = new ComputeBuffer(sensorCount, 4);
                 _cachedSensorInputs = new SensorInput[sensorCount];
                 _cachedZeros = new float[sensorCount];
             }
-            
             for (int i = 0; i < sensorCount; i++) {
                 _cachedSensorInputs[i] = new SensorInput { 
                     position = (Vector4)sensors[i].transform.position + new Vector4(0,0,0,1),
@@ -192,7 +173,7 @@ public class IrradianceBaker : MonoBehaviour
             _sensorOutputBuffer.SetData(_cachedZeros);
         }
 
-        var cmd = new CommandBuffer { name = "Dispatch ChronoLux" };
+        var cmd = new CommandBuffer { name = "ChronoLux Dispatch" };
         void SetCommon(RayTracingShader s) {
             cmd.SetRayTracingAccelerationStructure(s, _ID_SceneRTAS, _rtas);
             cmd.SetRayTracingBufferParam(s, _ID_SimulationMaterials, _simulationMaterialBuffer);
@@ -204,6 +185,7 @@ public class IrradianceBaker : MonoBehaviour
             cmd.SetRayTracingFloatParam(s, _ID_DiffuseLux, diffuseLux);
             cmd.SetRayTracingIntParam(s, _ID_MaterialCount, _materialCount);
             cmd.SetRayTracingIntParam(s, _ID_FrameIndex, (int)_frameIndex);
+            cmd.SetRayTracingIntParam(s, _ID_SamplesPerPixel, samplesPerPixel);
         }
 
         SetCommon(rayTracingShader);
@@ -223,16 +205,13 @@ public class IrradianceBaker : MonoBehaviour
         Graphics.ExecuteCommandBuffer(cmd);
         cmd.Release();
 
-        // 2. STABLE READBACK (Capture snapshot to avoid closure race conditions)
         if (sensorCount > 0) {
             var snapshot = sensors.ToArray();
             AsyncGPUReadback.Request(_sensorOutputBuffer, (req) => {
                 if (req.hasError) return;
                 var data = req.GetData<float>();
-                for (int i = 0; i < snapshot.Length; i++) {
-                    if (i < data.Length && snapshot[i] != null) 
-                        snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
-                }
+                for (int i = 0; i < snapshot.Length; i++) if (i < data.Length && snapshot[i] != null) 
+                    snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
             });
         }
     }

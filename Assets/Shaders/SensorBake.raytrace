@@ -10,8 +10,8 @@
 // ── INPUTS ───────────────────────────────────────────────────────────────────
 struct SensorInput
 {
-    float4 position; // float4 for 16-byte alignment
-    float4 normal;   // float4 for 16-byte alignment
+    float4 position; 
+    float4 normal;   
 };
 
 StructuredBuffer<SensorInput> _SensorInputs;
@@ -20,6 +20,7 @@ float _BeamLux;
 float _DiffuseLux;
 uint _FrameIndex;
 uint _MaterialCount;
+uint _SamplesPerPixel;
 
 // OUTPUT
 RWStructuredBuffer<float> _SensorOutputs;
@@ -41,19 +42,29 @@ void SensorBakeRayGen()
     float3 origin = input.position.xyz;
     float3 normal = normalize(input.normal.xyz);
     
-    uint seed = Hash(id + _FrameIndex);
+    uint baseSeed = Hash(id + _FrameIndex);
     float totalIrradiance = 0.0;
 
     // 1. Direct Sun Sample
-    float nDotSun = dot(normal, _SunDirection);
+    float nDotSun = max(0.0, dot(normal, _SunDirection));
     if (nDotSun > 0.0)
     {
-        totalIrradiance += TracePath(origin, _SunDirection, normal, seed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
+        uint sunSeed = baseSeed;
+        totalIrradiance += TracePath(origin, _SunDirection, normal, sunSeed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
     }
 
-    // 2. Random Hemisphere Sample
-    float3 randomDir = GetCosineWeightedDirection(normal, seed, PI);
-    totalIrradiance += TracePath(origin, randomDir, normal, seed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * PI;
+    // 2. Stochastic Multi-Sampling Loop
+    float indirectIrradiance = 0.0;
+    uint numSamples = max(1, _SamplesPerPixel);
+    
+    for (uint i = 0; i < numSamples; i++)
+    {
+        uint sampleSeed = Hash(baseSeed + i);
+        float3 randomDir = GetCosineWeightedDirection(normal, sampleSeed, PI);
+        indirectIrradiance += TracePath(origin, randomDir, normal, sampleSeed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux);
+    }
+    
+    totalIrradiance += (indirectIrradiance / (float)numSamples) * PI;
 
     _SensorOutputs[id] = totalIrradiance;
 }
