@@ -64,12 +64,16 @@ public class LightDoseSimulator : MonoBehaviour
 
     private void CleanDownsampleResources() {
         if (_downsampleRT != null) { _downsampleRT.Release(); _downsampleRT = null; }
-        if (_readbackTex != null) { DestroyImmediate(_readbackTex); _readbackTex = null; }
+        if (_readbackTex != null) { 
+            if (Application.isPlaying) Destroy(_readbackTex);
+            else DestroyImmediate(_readbackTex);
+            _readbackTex = null; 
+        }
     }
 
     [ContextMenu("Run Simulation")]
     public void StartSimulation() {
-        if (irradianceBaker == null || baker == null) return;
+        if (!ValidateReferences()) return;
         if (baker.PositionMap == null) baker.Bake();
         irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
         completedSteps = 0;
@@ -90,7 +94,7 @@ public class LightDoseSimulator : MonoBehaviour
 
     [ContextMenu("Test Static Bake (1 Hour)")]
     public void TestStaticBake() {
-        if (irradianceBaker == null || baker == null) return;
+        if (!ValidateReferences()) return;
         if (baker.PositionMap == null) baker.Bake();
         irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
         ApplySunPosition(new DateTime(year, 6, 21, 12, 0, 0));
@@ -99,6 +103,7 @@ public class LightDoseSimulator : MonoBehaviour
     }
 
     private IEnumerator RunSimulationInternal() {
+        if (stepSeconds <= 0) { Debug.LogError("[ChronoLux] stepSeconds must be > 0"); yield break; }
         float deltaHours = stepSeconds / 3600f;
         int totalDays = endDay - startDay + 1;
         int currentDayIdx = 0;
@@ -142,7 +147,10 @@ public class LightDoseSimulator : MonoBehaviour
             _downsampleRT.Create();
         }
         if (_readbackTex == null || _readbackTex.width != res) {
-            if (_readbackTex != null) DestroyImmediate(_readbackTex);
+            if (_readbackTex != null) {
+                if (Application.isPlaying) Destroy(_readbackTex);
+                else DestroyImmediate(_readbackTex);
+            }
             _readbackTex = new Texture2D(res, res, TextureFormat.RFloat, false);
         }
         Graphics.Blit(irradianceBaker.DoseMap, _downsampleRT);
@@ -166,5 +174,11 @@ public class LightDoseSimulator : MonoBehaviour
         sunLight.enabled = true;
         sunLight.transform.rotation = Quaternion.LookRotation(-sunDir, Vector3.up);
         sunLight.lightUnit = LightUnit.Lux; sunLight.intensity = sun.BeamLux;
+    }
+
+    private bool ValidateReferences() {
+        if (baker == null || irradianceBaker == null) return false;
+        if (stepSeconds <= 0) return false;
+        return true;
     }
 }

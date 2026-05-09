@@ -40,7 +40,6 @@ Shader "ChronoLux/HeatmapVisualizer"
                 return output;
             }
 
-            // 5-Stop Scientific Palette (Inferno Style)
             float3 GetHeatmapColor(float t)
             {
                 if (t <= 0.0) return float3(0, 0, 0);
@@ -52,7 +51,6 @@ Shader "ChronoLux/HeatmapVisualizer"
                 float3 c4 = float3(1.0, 0.9, 0.2);   // Yellow
                 
                 t = saturate(t);
-                
                 if (t < 0.25) return lerp(c0, c1, t * 4.0);
                 if (t < 0.50) return lerp(c1, c2, (t - 0.25) * 4.0);
                 if (t < 0.75) return lerp(c2, c3, (t - 0.50) * 4.0);
@@ -62,7 +60,9 @@ Shader "ChronoLux/HeatmapVisualizer"
             float4 frag(Varyings input) : SV_Target
             {
                 float dose = _DoseMap.Sample(sampler_DoseMap, input.uv).r;
-                float t = (dose - _MinDose) / max(1.0, _MaxDose - _MinDose);
+                float range = _MaxDose - _MinDose;
+                // Epsilon-protected normalization to ensure sub-unit ranges scale correctly
+                float t = saturate((dose - _MinDose) / max(1e-6, range));
                 return float4(GetHeatmapColor(t), 1.0);
             }
             ENDHLSL

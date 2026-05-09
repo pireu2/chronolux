@@ -70,6 +70,34 @@ public class IrradianceBaker : MonoBehaviour
     private void OnValidate() => ClampEnergy(ref defaultReflectance, ref defaultTransmittance);
     private static void ClampEnergy(ref float r, ref float t) { r = Mathf.Clamp01(r); t = Mathf.Clamp01(t); float s = r + t; if (s > 1f) { r /= s; t /= s; } }
 
+    private struct RendererSortEntry { public Renderer renderer; public string sortKey; }
+    private static string BuildTransformSortKey(Transform t) {
+        if (t == null) return string.Empty;
+        var s = new List<string>(8);
+        while (t != null) { s.Add($"{t.GetSiblingIndex():D6}:{t.name}"); t = t.parent; }
+        s.Reverse(); return string.Join("/", s);
+    }
+    private static string BuildRendererSortKey(Renderer r) {
+        if (r == null) return string.Empty;
+        string p = r.gameObject.scene.path ?? string.Empty;
+        string h = BuildTransformSortKey(r.transform);
+        int slot = 0; Renderer[] sib = r.GetComponents<Renderer>();
+        for (int i = 0; i < sib.Length; i++) if (ReferenceEquals(sib[i], r)) { slot = i; break; }
+        return $"{p}|{h}|{r.GetType().FullName}|{slot:D4}";
+    }
+
+    private void ResolveSimulationMaterial(Renderer renderer, out float reflectance, out float transmittance) {
+        reflectance = defaultReflectance; transmittance = defaultTransmittance;
+        var sim = renderer.GetComponent<SimulationMaterial>();
+        if (sim != null) { sim.GetClampedScalars(out reflectance, out transmittance); return; }
+        Material m = renderer.sharedMaterial;
+        if (m != null) {
+            if (m.HasProperty("_Reflectance")) reflectance = m.GetFloat("_Reflectance");
+            if (m.HasProperty("_Transmittance")) transmittance = m.GetFloat("_Transmittance");
+        }
+        ClampEnergy(ref reflectance, ref transmittance);
+    }
+
     public void Initialize(int width, int height)
     {
         if (!SystemInfo.supportsRayTracing || rayTracingShader == null) return;
@@ -77,10 +105,12 @@ public class IrradianceBaker : MonoBehaviour
         _rtas = new RayTracingAccelerationStructure();
 
         Renderer[] all = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
-        var sorted = new List<Renderer>(all.Length);
-        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) sorted.Add(r);
-        // Sort by instance ID for stability
-        sorted.Sort((a, b) => a.GetInstanceID().CompareTo(b.GetInstanceID()));
+        var sorted = new List<RendererSortEntry>(all.Length);
+        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) 
+            sorted.Add(new RendererSortEntry { renderer = r, sortKey = BuildRendererSortKey(r) });
+        
+        // Stable deterministic sort
+        sorted.Sort((a, b) => string.CompareOrdinal(a.sortKey, b.sortKey));
 
         var mats = new List<Vector4>(sorted.Count);
         var verts = new List<Vector4>(); 
@@ -88,7 +118,7 @@ public class IrradianceBaker : MonoBehaviour
         var metas = new MeshMetadata[Mathf.Max(1, sorted.Count) * MAX_SUBMESHES];
 
         for (int i = 0; i < sorted.Count; i++) {
-            Renderer r = sorted[i]; Mesh mesh = null; int subCount = 1;
+            Renderer r = sorted[i].renderer; Mesh mesh = null; int subCount = 1;
             if (r is MeshRenderer mr) { var mf = mr.GetComponent<MeshFilter>(); if (mf != null) mesh = mf.sharedMesh; }
             else if (r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh;
             if (mesh != null) subCount = mesh.subMeshCount;
@@ -101,9 +131,7 @@ public class IrradianceBaker : MonoBehaviour
                     metas[i * MAX_SUBMESHES + s] = new MeshMetadata { vertexOffset = vOff, indexOffset = iOff, hasGeometry = 1 };
                 }
             }
-            float refl = defaultReflectance; float trans = defaultTransmittance;
-            var sim = r.GetComponent<SimulationMaterial>();
-            if (sim != null) sim.GetClampedScalars(out refl, out trans);
+            ResolveSimulationMaterial(r, out float refl, out float trans);
             mats.Add(new Vector4(refl, trans, 0f, 0f));
             var flags = new RayTracingSubMeshFlags[subCount];
             for (int s = 0; s < subCount; s++) flags[s] = RayTracingSubMeshFlags.Enabled | RayTracingSubMeshFlags.ClosestHitOnly;
@@ -137,14 +165,13 @@ public class IrradianceBaker : MonoBehaviour
     {
         if (!_isInitialized || positionMap == null || normalMap == null) return;
         
-        // EDITOR CAMERA FALLBACK
         Camera cam = Camera.main;
 #if UNITY_EDITOR
         if (cam == null && UnityEditor.SceneView.lastActiveSceneView != null)
             cam = UnityEditor.SceneView.lastActiveSceneView.camera;
 #endif
         if (cam == null) cam = GetComponent<Camera>();
-        if (cam == null) return; // Still no camera found
+        if (cam == null) return; 
 
         _frameIndex++;
         sunDirection.Normalize();
@@ -182,7 +209,8 @@ public class IrradianceBaker : MonoBehaviour
             cmd.SetRayTracingFloatParam(s, _ID_DiffuseLux, diffuseLux);
             cmd.SetRayTracingIntParam(s, _ID_MaterialCount, _materialCount);
             cmd.SetRayTracingIntParam(s, _ID_FrameIndex, (int)_frameIndex);
-            cmd.SetRayTracingIntParam(s, _ID_SamplesPerPixel, samplesPerPixel);
+            // Defend against huge loops/TDR
+            cmd.SetRayTracingIntParam(s, _ID_SamplesPerPixel, Mathf.Clamp(samplesPerPixel, 1, 64));
         }
 
         SetCommon(rayTracingShader);
