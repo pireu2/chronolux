@@ -28,9 +28,6 @@ public class IrradianceBaker : MonoBehaviour
     public RayTracingShader rayTracingShader;
     public RayTracingShader sensorShader;
 
-    [Header("Simulation Fidelity")]
-    [Range(1, 64)] public int samplesPerPixel = 4;
-
     [Header("Fallback Simulation Material")]
     [Range(0f, 1f)] public float defaultReflectance = 0.8f;
     [Range(0f, 1f)] public float defaultTransmittance = 0.0f;
@@ -136,7 +133,7 @@ public class IrradianceBaker : MonoBehaviour
 
     private uint _frameIndex = 0;
 
-    public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, RenderTexture positionMap, RenderTexture normalMap)
+    public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, int samplesPerPixel, RenderTexture positionMap, RenderTexture normalMap)
     {
         if (!_isInitialized || positionMap == null || normalMap == null) return;
         
