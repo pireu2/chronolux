@@ -22,7 +22,7 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
     float3 currentDir = direction;
 
     [loop]
-    for (uint bounce = 0; bounce < 4; bounce++)
+    for (uint bounce = 0; bounce < MAX_BOUNCES; bounce++)
     {
         RayDesc ray;
         ray.Origin = currentOrigin;

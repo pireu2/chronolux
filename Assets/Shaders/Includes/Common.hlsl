@@ -24,5 +24,6 @@ static const float PI = 3.14159265359;
 static const float RAY_BIAS = 0.002;
 static const float MIN_VISIBILITY = 1e-4;
 static const uint MAX_SUBMESHES = 8;
+static const uint MAX_BOUNCES = 8; // Increased from 4 for higher fidelity
 
 #endif

@@ -57,6 +57,7 @@ public class IrradianceBaker : MonoBehaviour
     private static readonly int _ID_DeltaHours = Shader.PropertyToID("_DeltaHours");
     private static readonly int _ID_MaterialCount = Shader.PropertyToID("_MaterialCount");
     private static readonly int _ID_FrameIndex = Shader.PropertyToID("_FrameIndex");
+    private static readonly int _ID_SamplesPerPixel = Shader.PropertyToID("_SamplesPerPixel");
     private static readonly int _ID_SimulationMaterials = Shader.PropertyToID("_SimulationMaterials");
     private static readonly int _ID_MeshMetadata = Shader.PropertyToID("_MeshMetadata");
     private static readonly int _ID_GlobalVertices = Shader.PropertyToID("_GlobalVertices");
@@ -80,9 +81,9 @@ public class IrradianceBaker : MonoBehaviour
         if (r == null) return string.Empty;
         string p = r.gameObject.scene.path ?? string.Empty;
         string h = BuildTransformSortKey(r.transform);
-        int s = 0; Renderer[] sib = r.GetComponents<Renderer>();
-        for (int i = 0; i < sib.Length; i++) if (ReferenceEquals(sib[i], r)) { s = i; break; }
-        return $"{p}|{h}|{r.GetType().FullName}|{s:D4}";
+        int slot = 0; Renderer[] sib = r.GetComponents<Renderer>();
+        for (int i = 0; i < sib.Length; i++) if (ReferenceEquals(sib[i], r)) { slot = i; break; }
+        return $"{p}|{h}|{r.GetType().FullName}|{slot:D4}";
     }
 
     private void ResolveSimulationMaterial(Renderer renderer, out float reflectance, out float transmittance) {
@@ -105,7 +106,10 @@ public class IrradianceBaker : MonoBehaviour
 
         Renderer[] all = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
         var sorted = new List<RendererSortEntry>(all.Length);
-        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) sorted.Add(new RendererSortEntry { renderer = r, sortKey = BuildRendererSortKey(r) });
+        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) 
+            sorted.Add(new RendererSortEntry { renderer = r, sortKey = BuildRendererSortKey(r) });
+        
+        // Stable deterministic sort
         sorted.Sort((a, b) => string.CompareOrdinal(a.sortKey, b.sortKey));
 
         var mats = new List<Vector4>(sorted.Count);
@@ -157,31 +161,32 @@ public class IrradianceBaker : MonoBehaviour
 
     private uint _frameIndex = 0;
 
-    public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, RenderTexture positionMap, RenderTexture normalMap)
+    public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, int samplesPerPixel, RenderTexture positionMap, RenderTexture normalMap)
     {
         if (!_isInitialized || positionMap == null || normalMap == null) return;
-        if (sunDirection.sqrMagnitude <= 1e-8f) return;
-
-        Camera cam = Camera.main ?? GetComponent<Camera>();
-        if (cam == null) return; // Early exit before CommandBuffer allocation
+        
+        Camera cam = Camera.main;
+#if UNITY_EDITOR
+        if (cam == null && UnityEditor.SceneView.lastActiveSceneView != null)
+            cam = UnityEditor.SceneView.lastActiveSceneView.camera;
+#endif
+        if (cam == null) cam = GetComponent<Camera>();
+        if (cam == null) return; 
 
         _frameIndex++;
         sunDirection.Normalize();
 
-        // 1. DYNAMIC SENSOR UPDATE
         var sensors = VirtualLuxSensor.AllSensors;
         int sensorCount = sensors.Count;
-
         if (sensorCount > 0) {
             if (_sensorInputBuffer == null || _sensorInputBuffer.count != sensorCount) {
                 if (_sensorInputBuffer != null) _sensorInputBuffer.Release();
                 if (_sensorOutputBuffer != null) _sensorOutputBuffer.Release();
-                _sensorInputBuffer = new ComputeBuffer(sensorCount, Marshal.SizeOf<SensorInput>());
-                _sensorOutputBuffer = new ComputeBuffer(sensorCount, sizeof(float));
+                _sensorInputBuffer = new ComputeBuffer(sensorCount, 32);
+                _sensorOutputBuffer = new ComputeBuffer(sensorCount, 4);
                 _cachedSensorInputs = new SensorInput[sensorCount];
                 _cachedZeros = new float[sensorCount];
             }
-            
             for (int i = 0; i < sensorCount; i++) {
                 _cachedSensorInputs[i] = new SensorInput { 
                     position = (Vector4)sensors[i].transform.position + new Vector4(0,0,0,1),
@@ -192,7 +197,7 @@ public class IrradianceBaker : MonoBehaviour
             _sensorOutputBuffer.SetData(_cachedZeros);
         }
 
-        var cmd = new CommandBuffer { name = "Dispatch ChronoLux" };
+        var cmd = new CommandBuffer { name = "ChronoLux Dispatch" };
         void SetCommon(RayTracingShader s) {
             cmd.SetRayTracingAccelerationStructure(s, _ID_SceneRTAS, _rtas);
             cmd.SetRayTracingBufferParam(s, _ID_SimulationMaterials, _simulationMaterialBuffer);
@@ -204,6 +209,8 @@ public class IrradianceBaker : MonoBehaviour
             cmd.SetRayTracingFloatParam(s, _ID_DiffuseLux, diffuseLux);
             cmd.SetRayTracingIntParam(s, _ID_MaterialCount, _materialCount);
             cmd.SetRayTracingIntParam(s, _ID_FrameIndex, (int)_frameIndex);
+            // Defend against huge loops/TDR
+            cmd.SetRayTracingIntParam(s, _ID_SamplesPerPixel, Mathf.Clamp(samplesPerPixel, 1, 64));
         }
 
         SetCommon(rayTracingShader);
@@ -223,16 +230,13 @@ public class IrradianceBaker : MonoBehaviour
         Graphics.ExecuteCommandBuffer(cmd);
         cmd.Release();
 
-        // 2. STABLE READBACK (Capture snapshot to avoid closure race conditions)
         if (sensorCount > 0) {
             var snapshot = sensors.ToArray();
             AsyncGPUReadback.Request(_sensorOutputBuffer, (req) => {
                 if (req.hasError) return;
                 var data = req.GetData<float>();
-                for (int i = 0; i < snapshot.Length; i++) {
-                    if (i < data.Length && snapshot[i] != null) 
-                        snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
-                }
+                for (int i = 0; i < snapshot.Length; i++) if (i < data.Length && snapshot[i] != null) 
+                    snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
             });
         }
     }
