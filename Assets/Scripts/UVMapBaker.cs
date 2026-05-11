@@ -8,8 +8,12 @@ public class UVMapBaker : MonoBehaviour
     public RenderTexture PositionMap { get; private set; }
     public RenderTexture NormalMap { get; private set; }
 
+    public int SurfacePixelCount { get; private set; }
+
     [ContextMenu("Bake UV Maps")]
-    public void Bake()
+    public void Bake() => Bake(resolution);
+
+    public void Bake(int targetResolution)
     {
         if (bakeShader == null) return;
         var allMF = GetComponentsInChildren<MeshFilter>(true);
@@ -17,10 +21,10 @@ public class UVMapBaker : MonoBehaviour
 
         if (PositionMap != null) PositionMap.Release();
         if (NormalMap != null) NormalMap.Release();
-        PositionMap = MakeRT();
-        NormalMap = MakeRT();
+        PositionMap = MakeRT(targetResolution);
+        NormalMap = MakeRT(targetResolution);
 
-        var depthRT = new RenderTexture(resolution, resolution, 16, RenderTextureFormat.Depth);
+        var depthRT = new RenderTexture(targetResolution, targetResolution, 16, RenderTextureFormat.Depth);
         depthRT.Create();
 
         var mat = new Material(bakeShader);
@@ -40,15 +44,36 @@ public class UVMapBaker : MonoBehaviour
         }
 
         Graphics.ExecuteCommandBuffer(cmd);
+        
+        // CALCULATE TOTAL SURFACE PIXELS
+        CalculateSurfacePixels(targetResolution);
+
         cmd.Release();
         DestroyImmediate(mat);
         depthRT.Release();
         DestroyImmediate(depthRT);
     }
 
-    RenderTexture MakeRT()
+    private void CalculateSurfacePixels(int res)
     {
-        var rt = new RenderTexture(resolution, resolution, 0, RenderTextureFormat.ARGBFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear };
+        var readback = new Texture2D(res, res, TextureFormat.RGBAFloat, false);
+        RenderTexture activeRT = RenderTexture.active;
+        RenderTexture.active = PositionMap;
+        readback.ReadPixels(new Rect(0, 0, res, res), 0, 0);
+        readback.Apply();
+        RenderTexture.active = activeRT;
+
+        var data = readback.GetRawTextureData<Vector4>();
+        int count = 0;
+        for (int i = 0; i < data.Length; i++) if (data[i].w > 0.5f) count++; // Alpha channel used for masking
+        SurfacePixelCount = count > 0 ? count : 1; // Prevent div by zero
+        
+        if (Application.isPlaying) Destroy(readback); else DestroyImmediate(readback);
+    }
+
+    RenderTexture MakeRT(int res)
+    {
+        var rt = new RenderTexture(res, res, 0, RenderTextureFormat.ARGBFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear };
         rt.Create();
         return rt;
     }

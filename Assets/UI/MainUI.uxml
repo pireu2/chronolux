@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements" editor-extension-mode="False">
+    <Style src="project:/Assets/UI/Styles.uss" />
+    
+    <ui:VisualElement name="Root" class="root-container">
+        
+        <!-- Central Crosshair -->
+        <ui:VisualElement name="Crosshair" class="crosshair" />
+        
+        <!-- ── VIEW 1: PROJECT LAUNCHER ── -->
+        <ui:VisualElement name="LauncherScreen" class="launcher-screen">
+            <ui:VisualElement class="launcher-card">
+                <ui:VisualElement class="launcher-header">
+                    <ui:Label text="CHRONOLUX: HERITAGE DOSIMETRY" class="title" style="font-size: 20px;" />
+                    <ui:Label text="Professional Environmental Light Analysis Suite" style="color: #666; font-size: 11px; margin-top: -5px;" />
+                </ui:VisualElement>
+                <ui:VisualElement class="launcher-body">
+                    <ui:VisualElement class="launcher-column">
+                        <ui:Label text="LOAD RECENT PROJECT" class="module-title" />
+                        <ui:ScrollView name="ProjectList" style="flex-grow: 1;" />
+                    </ui:VisualElement>
+                    <ui:VisualElement class="column-divider" />
+                    <ui:VisualElement class="launcher-column">
+                        <ui:Label text="CREATE NEW PROJECT" class="module-title" />
+                        <ui:TextField label="Project Name" name="InputProjectName" />
+                        <ui:Label text="Model Repository (.obj)" style="margin-top: 15px; color: #666; font-size: 10px;" />
+                        <ui:ScrollView name="ModelList" style="height: 220px; background-color: #1a1a1a; border-radius: 4px; margin-top: 5px;" />
+                        <ui:VisualElement style="flex-grow: 1;" />
+                        <ui:Button text="INITIALIZE PROJECT" name="BtnLaunch" class="button button-primary" style="height: 45px; margin-top: 10px;" />
+                    </ui:VisualElement>
+                </ui:VisualElement>
+            </ui:VisualElement>
+        </ui:VisualElement>
+
+        <!-- ── VIEW 2: SIMULATION DASHBOARD ── -->
+        <ui:VisualElement name="DashboardScreen" class="dashboard-screen" style="display: none; height: 100%;">
+            
+            <!-- Telemetry Header -->
+            <ui:VisualElement class="header">
+                <ui:Label text="CHRONOLUX" class="title" style="font-size: 20px;" />
+                <ui:VisualElement style="flex-direction: row; align-items: center;">
+                    <ui:Label text="2025-06-21 12:00" name="TxtTime" style="margin-right: 25px; font-size: 16px; -unity-font-style: bold;" />
+                    <ui:Label text="ALT: 0.0° | AZI: 0.0°" name="TxtSunCoords" style="color: #666; margin-right: 25px; font-size: 13px;" />
+                    <ui:Button text="NAVIGATE" name="BtnNav" class="button button-primary" style="height: 32px; width: 100px; margin-right: 10px;" />
+                    <ui:Button text="EXIT" name="BtnExit" class="button" style="height: 32px; width: 60px;" />
+                </ui:VisualElement>
+            </ui:VisualElement>
+
+            <!-- Workspace Sidebars -->
+            <ui:VisualElement style="flex-grow: 1; flex-direction: row; pointer-events: none;">
+                
+                <!-- Left Sidebar: Controls -->
+                <ui:VisualElement class="sidebar" style="pointer-events: auto;">
+                    
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="LOCATION" class="module-title" />
+                        <ui:TextField label="Lat" name="InLat" value="44.426" />
+                        <ui:TextField label="Lon" name="InLon" value="26.102" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="TIME RANGE" class="module-title" />
+                        <ui:TextField label="Year" name="InYear" value="2025" />
+                        <ui:TextField label="Start" name="InStartDay" value="1" />
+                        <ui:TextField label="End" name="InEndDay" value="365" />
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="SIMULATION ENGINE" class="module-title" />
+                        
+                        <ui:DropdownField label="Resolution" name="DdRes" index="1" />
+
+                        <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 5px;">
+                            <ui:SliderInt label="SPP" name="SldSamples" low-value="1" high-value="64" value="8" style="flex-grow: 1;" />
+                            <ui:Label text="8" name="LblSamplesVal" style="width: 25px; -unity-text-align: middle-right; font-size: 10px;" />
+                        </ui:VisualElement>
+                        <ui:VisualElement style="height: 10px;" />
+                        <ui:Button text="START BAKE" name="BtnStart" class="button" style="background-color: #004D40;" />
+                        <ui:Button text="STOP" name="BtnStop" class="button" />
+                        <ui:Button text="CLEAR MAP" name="BtnClear" class="button" />
+                        <ui:ProgressBar name="ProgSim" style="margin-top: 15px;" />
+                    </ui:VisualElement>
+
+                </ui:VisualElement>
+
+                <!-- Center Spacing -->
+                <ui:VisualElement style="flex-grow: 1; pointer-events: none;" />
+
+                <!-- Right Sidebar: Data -->
+                <ui:VisualElement class="sidebar sidebar-right" style="pointer-events: auto;">
+                    
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="GLOBAL METROLOGY" class="module-title" />
+                        <ui:Label text="PEAK DOSE" class="telemetry-label" />
+                        <ui:Label text="0 Lux·h" name="TxtMaxDose" class="value-hero" />
+                        <ui:Toggle label="Dynamic Auto-Scale" name="TglAutoScale" value="true" />
+                    </ui:VisualElement>
+
+                    <!-- SELECTION PANEL with SLIDERS -->
+                    <ui:VisualElement name="SelectionPanel" class="module-card" style="display: none;">
+                        <ui:Label text="OBJECT PROPERTIES" class="module-title" />
+                        <ui:Label text="Object Name" name="TxtSelectedName" style="color: #666; font-size: 10px; margin-bottom: 5px;" />
+                        
+                        <ui:VisualElement style="flex-direction: row; align-items: center;">
+                            <ui:Slider label="Refl" name="SldRefl" low-value="0" high-value="1" style="flex-grow: 1;" />
+                            <ui:Label text="0.00" name="LblReflVal" style="width: 35px; -unity-text-align: middle-right; font-size: 10px;" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 5px;">
+                            <ui:Slider label="Trans" name="SldTrans" low-value="0" high-value="1" style="flex-grow: 1;" />
+                            <ui:Label text="0.00" name="LblTransVal" style="width: 35px; -unity-text-align: middle-right; font-size: 10px;" />
+                        </ui:VisualElement>
+                    </ui:VisualElement>
+
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="SCIENTIFIC ANALYTICS" class="module-title" />
+                        
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Metrology Error" class="stat-label" />
+                            <ui:Label text="0.00%" name="TxtErrorPct" class="stat-value" style="color: #00E5FF;" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Risk Level" class="stat-label" />
+                            <ui:Label text="LOW" name="TxtRisk" class="stat-value" style="color: #4CAF50;" />
+                        </ui:VisualElement>
+
+                        <ui:Label text="IRRADIANCE HISTORY (W/m²)" style="font-size: 9px; color: #555; margin-top: 15px;" />
+                        <ui:VisualElement name="GraphContainer" class="graph-container" />
+                    </ui:VisualElement>
+
+                </ui:VisualElement>
+
+            </ui:VisualElement>
+
+            <!-- Material Ribbon -->
+            <ui:VisualElement class="bottom-bar">
+                <ui:Label text="MATERIAL LIBRARY" class="module-title" style="width: 120px;" />
+                <ui:ScrollView name="MaterialCatalog" orientation="Horizontal" style="flex-grow: 1;" />
+            </ui:VisualElement>
+
+        </ui:VisualElement>
+
+    </ui:VisualElement>
+</ui:UXML>

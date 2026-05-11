@@ -5,6 +5,7 @@ Shader "ChronoLux/HeatmapVisualizer"
         [NoScaleOffset] _DoseMap("Accumulated Dose Map (float)", 2D) = "black" {}
         _MinDose("Min Range", Float) = 0.0
         _MaxDose("Max Range", Float) = 100000.0
+        [HideInInspector] _SelectionColor("Selection Glow", Color) = (0,0,0,0)
     }
     SubShader
     {
@@ -30,6 +31,7 @@ Shader "ChronoLux/HeatmapVisualizer"
             SamplerState sampler_DoseMap;
             float _MinDose;
             float _MaxDose;
+            float4 _SelectionColor;
 
             Varyings vert(Attributes input)
             {
@@ -43,13 +45,11 @@ Shader "ChronoLux/HeatmapVisualizer"
             float3 GetHeatmapColor(float t)
             {
                 if (t <= 0.0) return float3(0, 0, 0);
-
                 float3 c0 = float3(0.0, 0.0, 0.0);   // Black
-                float3 c1 = float3(0.2, 0.0, 0.5);   // Deep Purple
-                float3 c2 = float3(0.8, 0.0, 0.5);   // Vibrant Magenta
+                float3 c1 = float3(0.2, 0.0, 0.5);   // Purple
+                float3 c2 = float3(0.8, 0.0, 0.5);   // Magenta
                 float3 c3 = float3(1.0, 0.5, 0.0);   // Orange
                 float3 c4 = float3(1.0, 0.9, 0.2);   // Yellow
-                
                 t = saturate(t);
                 if (t < 0.25) return lerp(c0, c1, t * 4.0);
                 if (t < 0.50) return lerp(c1, c2, (t - 0.25) * 4.0);
@@ -60,14 +60,16 @@ Shader "ChronoLux/HeatmapVisualizer"
             float4 frag(Varyings input) : SV_Target
             {
                 float dose = _DoseMap.Sample(sampler_DoseMap, input.uv).r;
-                float range = _MaxDose - _MinDose;
-                // Epsilon-protected normalization to ensure sub-unit ranges scale correctly
-                float t = saturate((dose - _MinDose) / max(1e-6, range));
-                return float4(GetHeatmapColor(t), 1.0);
+                float t = (dose - _MinDose) / max(1.0, _MaxDose - _MinDose);
+                float3 baseColor = GetHeatmapColor(t);
+                
+                // Add Selection/Hover Glow
+                // We add it as an additive "rim/glow" effect
+                return float4(baseColor + _SelectionColor.rgb * _SelectionColor.a, 1.0);
             }
             ENDHLSL
         }
-
+        
         Pass
         {
             Name "DepthForwardOnly"

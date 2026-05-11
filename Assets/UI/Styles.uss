@@ -1,0 +1,262 @@
+/* ChronoLux Professional Stylesheet */
+
+:root {
+    --bg-dark: #1E1E1E;
+    --bg-glass: rgba(30, 30, 30, 0.9);
+    --panel-dark: #252526;
+    --panel-light: #2D2D30;
+    --border-grey: #3F3F3F;
+    --text-white: #CCCCCC;
+    --text-dim: #888888;
+    --text-dark: #111111; 
+    --cyan-accent: #00E5FF;
+}
+
+.root-container {
+    flex-grow: 1;
+    color: var(--text-white);
+}
+
+/* ── CROSSHAIR ──────────────────────────────────────────────────────── */
+.crosshair {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 50%;
+    top: 50%;
+    margin-left: -12px;
+    margin-top: -12px;
+    background-image: url('project:/Assets/Textures/crosshair.png');
+    /* Use white tint if texture is dark, or invert if needed */
+    -unity-background-image-tint-color: #00E5FF;
+    /* Force visibility if texture is black */
+    background-color: transparent;
+    pointer-events: none;
+}
+
+/* ── INPUTS ─────────────────────────────────────────────────────────── */
+.unity-base-field__label {
+    min-width: 80px;
+    color: var(--text-dim);
+    font-size: 11px;
+}
+
+/* DARKEN DROPDOWN / INPUT TEXT FOR VISIBILITY */
+.unity-base-field__input {
+    background-color: #AAAAAA; /* Lighter background */
+    color: #111111;           /* Darker text */
+    -unity-font-style: bold;
+    padding: 3px 6px;
+    border-radius: 3px;
+    border-width: 0;
+}
+
+.unity-text-field__input {
+    background-color: #AAAAAA;
+    color: #111111;
+}
+
+/* ── ANALYTICS ──────────────────────────────────────────────────────── */
+.stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: #888;
+}
+
+.stat-value {
+    font-size: 11px;
+    color: white;
+    -unity-font-style: bold;
+}
+
+.graph-container {
+    height: 60px;
+    background-color: rgba(0, 0, 0, 0.3);
+    margin-top: 10px;
+    border-width: 1px;
+    border-color: #333;
+    flex-direction: row;
+    align-items: flex-end;
+    padding: 2px;
+}
+
+.graph-bar {
+    background-color: var(--cyan-accent);
+    margin: 0 1px;
+    flex-grow: 1;
+}
+
+/* ── SHARED ─────────────────────────────────────────────────────────── */
+.panel {
+    background-color: var(--panel-dark);
+    border-color: var(--border-grey);
+    border-width: 1px;
+    border-radius: 6px;
+}
+
+.button {
+    background-color: #3F3F3F;
+    border-radius: 4px;
+    padding: 8px;
+    margin: 3px 0;
+    color: white;
+    -unity-font-style: bold;
+    font-size: 12px;
+}
+
+.button:hover {
+    background-color: var(--cyan-accent);
+    color: black;
+}
+
+.button-primary {
+    background-color: #00838F;
+}
+
+/* ── LAUNCHER HUB ────────────────────────────────────────────────────── */
+.launcher-screen {
+    flex-grow: 1;
+    background-color: var(--bg-dark);
+    justify-content: center;
+    align-items: center;
+}
+
+.launcher-card {
+    width: 850px;
+    height: 600px;
+    background-color: var(--panel-dark);
+    border-width: 1px;
+    border-color: #333;
+    border-radius: 12px;
+    overflow: hidden;
+    border-bottom-width: 4px;
+    border-bottom-color: #111;
+}
+
+.launcher-header {
+    height: 80px;
+    background-color: #1a1a1a;
+    justify-content: center;
+    padding-left: 30px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--cyan-accent);
+}
+
+.launcher-body {
+    flex-grow: 1;
+    flex-direction: row;
+}
+
+.launcher-column {
+    flex-grow: 1;
+    flex-basis: 0;
+    padding: 25px;
+}
+
+.column-divider {
+    width: 1px;
+    background-color: #333;
+    margin: 40px 0;
+}
+
+.list-item {
+    background-color: #2d2d2d;
+    padding: 10px 15px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    border-left-width: 3px;
+    border-left-color: transparent;
+}
+
+.list-item:hover {
+    background-color: #444;
+    border-left-color: var(--cyan-accent);
+}
+
+/* ── DASHBOARD HUD ───────────────────────────────────────────────────── */
+.dashboard-screen {
+    flex-grow: 1;
+}
+
+.header {
+    height: 50px;
+    flex-direction: row;
+    background-color: #111;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--cyan-accent);
+}
+
+.sidebar {
+    width: 300px;
+    background-color: var(--bg-glass);
+    border-width: 0;
+    margin: 0;
+    padding: 15px;
+    border-right-width: 1px;
+    border-right-color: #333;
+}
+
+.sidebar-right {
+    border-right-width: 0;
+    border-left-width: 1px;
+    border-left-color: #333;
+}
+
+/* Sub-grouping cards within sidebars */
+.module-card {
+    background-color: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
+    padding: 12px;
+    margin-bottom: 15px;
+    border-width: 1px;
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+.module-title {
+    font-size: 10px;
+    -unity-font-style: bold;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+}
+
+/* Hero Data Presentation */
+.value-hero {
+    font-size: 32px;
+    -unity-font-style: bold;
+    color: var(--cyan-accent);
+    margin: 5px 0;
+}
+
+.telemetry-label {
+    font-size: 12px;
+    color: #888;
+}
+
+/* Material Catalog swatches */
+.bottom-bar {
+    height: 120px;
+    background-color: var(--bg-glass);
+    border-top-width: 1px;
+    border-top-color: var(--cyan-accent);
+    padding: 15px;
+}
+
+#MaterialCatalog .unity-scroll-view__content-container {
+    flex-direction: row;
+    flex-wrap: wrap;
+    padding: 0px 10px;
+}
+
+#MaterialCatalog .button {
+    margin: 5px;
+    width: 140px;
+}
