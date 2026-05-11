@@ -148,7 +148,7 @@ Light:
   serializedVersion: 12
   m_Type: 1
   m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_Intensity: 130000
+  m_Intensity: 86851.7
   m_Range: 10
   m_SpotAngle: 30
   m_InnerSpotAngle: 0
@@ -210,7 +210,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 157207112}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.6427876, y: 0, z: 0, w: 0.7660445}
+  m_LocalRotation: {x: 0.49052313, y: -0.31373364, z: 0.19498338, w: 0.78926533}
   m_LocalPosition: {x: 0, y: 2.858, z: -4.33}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
@@ -397,19 +397,13 @@ MonoBehaviour:
   endDay: 172
   stepSeconds: 1800
   samplesPerPixel: 64
-  minExposureRange: 0
-  maxExposureLimit: 100000
-  criticalLimit: 500000
-  useLogScale: 0
-  shadowVisibility: 0.2
   sunLight: {fileID: 157207113}
   baker: {fileID: 429242158}
   irradianceBaker: {fileID: 183423943}
   previewTextureProperty: _DoseMap
-  simulatedTime: "\u2013"
-  progressPercent: 0
+  maxDoseInScene: 94948.19
+  currentProgress: 100
   completedSteps: 0
-  currentMaxDoseFound: 0
 --- !u!4 &183423942
 Transform:
   m_ObjectHideFlags: 0
@@ -439,7 +433,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::IrradianceBaker
   rayTracingShader: {fileID: 4807578003741378534, guid: ecae26d334832a04ca62f479ebdc322c, type: 3}
   sensorShader: {fileID: 4807578003741378534, guid: b7c26d6db48d3784f8ba482fe25ae09b, type: 3}
-  samplesPerPixel: 64
   defaultReflectance: 0.8
   defaultTransmittance: 0
 --- !u!1001 &297171473
@@ -553,6 +546,9 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
       insertIndex: -1
       addedObject: {fileID: 429242158}
+    - targetCorrespondingSourceObject: {fileID: 8164078558771037576, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 461242381}
   m_SourcePrefab: {fileID: 100100000, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
 --- !u!1 &429242156 stripped
 GameObject:
@@ -622,6 +618,33 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &461242377 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 8164078558771037576, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
+  m_PrefabInstance: {fileID: 297171473}
+  m_PrefabAsset: {fileID: 0}
+--- !u!64 &461242381
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 461242377}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 0
+  m_CookingOptions: 30
+  m_Mesh: {fileID: -2432090755550338912, guid: 4310cbf24a8153b4b9659932a350ffb3, type: 3}
 --- !u!1 &782070611
 GameObject:
   m_ObjectHideFlags: 0
@@ -918,6 +941,8 @@ GameObject:
   - component: {fileID: 1823688466}
   - component: {fileID: 1823688465}
   - component: {fileID: 1823688468}
+  - component: {fileID: 1823688469}
+  - component: {fileID: 1823688470}
   m_Layer: 0
   m_Name: SceneCamera
   m_TagString: MainCamera
@@ -1138,6 +1163,37 @@ MonoBehaviour:
       enableFptlForForwardOpaque: 0
       enableBigTilePrepass: 0
       isFptlEnabled: 0
+--- !u!114 &1823688469
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1823688464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: e15fe19b95af39d44b3df078dec87773, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChronoLux.Interaction.ObjectPicker
+  selectionShader: {fileID: 4800000, guid: f44542be283623744807992b89f95e12, type: 3}
+  hoverColor: {r: 0, g: 0.5, b: 1, a: 0.5}
+  selectColor: {r: 0.6, g: 0, b: 1, a: 0.8}
+  hoveredObject: {fileID: 0}
+  selectedObject: {fileID: 0}
+--- !u!114 &1823688470
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1823688464}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 830c40607f4e4a34ca6b85704aaf9940, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ChronoLux.Interaction.FreeLookCamera
+  sensitivity: 0.1
+  speed: 5
 --- !u!1 &1913383145
 GameObject:
   m_ObjectHideFlags: 0

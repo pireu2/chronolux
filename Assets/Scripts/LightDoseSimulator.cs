@@ -25,7 +25,6 @@ public class LightDoseSimulator : MonoBehaviour
     public float stepSeconds = 3600f;
 
     [Header("Simulation Quality")]
-    [Tooltip("Number of random hemisphere rays to shoot per texel per step.")]
     [Range(1, 64)] public int samplesPerPixel = 8;
 
     [Header("Scene References")]
@@ -35,9 +34,14 @@ public class LightDoseSimulator : MonoBehaviour
     public string previewTextureProperty = "_DoseMap";
 
     [Header("Auto-Visualization (Read Only)")]
+    [ReadOnly] public string simulatedTime = "–";
     [ReadOnly] public float maxDoseInScene = 0f;
     [ReadOnly] public float currentProgress = 0f;
     [ReadOnly] public int completedSteps = 0;
+    
+    // Exposed for UI readback
+    [ReadOnly] public float currentAltitude = 0f;
+    [ReadOnly] public float currentAzimuth = 0f;
 
     private bool _isSimulating = false;
     private IEnumerator _simulationEnumerator;
@@ -119,7 +123,7 @@ public class LightDoseSimulator : MonoBehaviour
                 irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, deltaHours, samplesPerPixel, baker.PositionMap, baker.NormalMap);
                 completedSteps++;
                 currentProgress = ((float)currentDayIdx / totalDays) * 100f;
-                if (completedSteps % 20 == 0) { FindMaxDose(false); ApplyDosePreview(); SceneView.RepaintAll(); }
+                if (completedSteps % 10 == 0) { FindMaxDose(false); ApplyDosePreview(); SceneView.RepaintAll(); }
                 yield return null;
             }
         }
@@ -168,7 +172,14 @@ public class LightDoseSimulator : MonoBehaviour
     private void ApplySunPosition(DateTime localTime) {
         SunCalculator.SunPosition sun = SunCalculator.Calculate(latitude, longitude, utcOffset, localTime);
         Vector3 sunDir = SunCalculator.ToWorldDirection(sun);
-        CurrentSunDirection = sunDir; CurrentBeamLux = sun.BeamLux; CurrentDiffuseLux = sun.DiffuseLux;
+        CurrentSunDirection = sunDir; 
+        CurrentBeamLux = sun.BeamLux; 
+        CurrentDiffuseLux = sun.DiffuseLux;
+        
+        simulatedTime = localTime.ToString("yyyy-MM-dd HH:mm");
+        currentAltitude = sun.AltitudeDeg;
+        currentAzimuth = sun.AzimuthDeg;
+
         if (sunLight == null) return;
         if (!sun.IsAboveHorizon) { sunLight.enabled = false; return; }
         sunLight.enabled = true;
