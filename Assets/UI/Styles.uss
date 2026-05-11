@@ -17,6 +17,23 @@
     color: var(--text-white);
 }
 
+/* ── CROSSHAIR ──────────────────────────────────────────────────────── */
+.crosshair {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    left: 50%;
+    top: 50%;
+    margin-left: -12px;
+    margin-top: -12px;
+    background-image: url('project:/Assets/Textures/crosshair.png');
+    /* Use white tint if texture is dark, or invert if needed */
+    -unity-background-image-tint-color: #00E5FF;
+    /* Force visibility if texture is black */
+    background-color: transparent;
+    pointer-events: none;
+}
+
 /* ── INPUTS ─────────────────────────────────────────────────────────── */
 .unity-base-field__label {
     min-width: 80px;
@@ -24,17 +41,54 @@
     font-size: 11px;
 }
 
-.unity-text-field__input {
-    background-color: #666;
-    color: white;
+/* DARKEN DROPDOWN / INPUT TEXT FOR VISIBILITY */
+.unity-base-field__input {
+    background-color: #AAAAAA; /* Lighter background */
+    color: #111111;           /* Darker text */
     -unity-font-style: bold;
     padding: 3px 6px;
     border-radius: 3px;
     border-width: 0;
 }
 
-.unity-text-field__input:focus {
-    background-color: #888;
+.unity-text-field__input {
+    background-color: #AAAAAA;
+    color: #111111;
+}
+
+/* ── ANALYTICS ──────────────────────────────────────────────────────── */
+.stat-row {
+    flex-direction: row;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.stat-label {
+    font-size: 11px;
+    color: #888;
+}
+
+.stat-value {
+    font-size: 11px;
+    color: white;
+    -unity-font-style: bold;
+}
+
+.graph-container {
+    height: 60px;
+    background-color: rgba(0, 0, 0, 0.3);
+    margin-top: 10px;
+    border-width: 1px;
+    border-color: #333;
+    flex-direction: row;
+    align-items: flex-end;
+    padding: 2px;
+}
+
+.graph-bar {
+    background-color: var(--cyan-accent);
+    margin: 0 1px;
+    flex-grow: 1;
 }
 
 /* ── SHARED ─────────────────────────────────────────────────────────── */
@@ -199,4 +253,10 @@
 #MaterialCatalog .unity-scroll-view__content-container {
     flex-direction: row;
     flex-wrap: wrap;
+    padding: 0px 10px;
+}
+
+#MaterialCatalog .button {
+    margin: 5px;
+    width: 140px;
 }

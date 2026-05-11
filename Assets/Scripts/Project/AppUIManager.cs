@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using ChronoLux.Library;
 using ChronoLux.Interaction;
 using System;
+using System.IO;
 
 namespace ChronoLux.Project
 {
@@ -37,56 +38,55 @@ namespace ChronoLux.Project
             _projectList = root.Q<ScrollView>("ProjectList");
             _modelList = root.Q<ScrollView>("ModelList");
 
-            // Launcher
-            var btnLaunch = root.Q<Button>("BtnLaunch");
-            if (btnLaunch != null) btnLaunch.clicked += OnLaunchClicked;
-
-            // Dashboard
-            var btnExit = root.Q<Button>("BtnExit");
-            if (btnExit != null) btnExit.clicked += ShowLauncher;
-
-            var btnStart = root.Q<Button>("BtnStart");
-            if (btnStart != null) btnStart.clicked += () => { SyncParamsToSimulator(); simulator.StartSimulation(); };
-
-            var btnStop = root.Q<Button>("BtnStop");
-            if (btnStop != null) btnStop.clicked += () => simulator.StopSimulation();
-
-            var btnClear = root.Q<Button>("BtnClear");
-            if (btnClear != null) btnClear.clicked += () => simulator.AutoScale();
-
-            var btnNav = root.Q<Button>("BtnNav");
-            if (btnNav != null) btnNav.clicked += () => {
-                UnityEngine.Cursor.lockState = CursorLockMode.Locked;
-                UnityEngine.Cursor.visible = false;
+            var btnLaunch = root.Q<Button>("BtnLaunch"); if (btnLaunch != null) btnLaunch.clicked += OnLaunchClicked;
+            var btnExit = root.Q<Button>("BtnExit"); if (btnExit != null) btnExit.clicked += ShowLauncher;
+            
+            var btnStart = root.Q<Button>("BtnStart"); 
+            if (btnStart != null) btnStart.clicked += () => { 
+                if (simulator != null) { 
+                    _irradianceHistory.Clear(); // Reset graph on new run
+                    SyncParamsToSimulator(); 
+                    simulator.StartSimulation(); 
+                } 
             };
 
-            // SPP Slider
+            var btnStop = root.Q<Button>("BtnStop");
+            if (btnStop != null) btnStop.clicked += () => { if (simulator != null) simulator.StopSimulation(); };
+
+            var btnClear = root.Q<Button>("BtnClear");
+            if (btnClear != null) btnClear.clicked += () => { if (simulator != null) simulator.ClearDoseMap(); };
+var btnNav = root.Q<Button>("BtnNav");
+if (btnNav != null) btnNav.clicked += StartNavigation;
+
+// Resolution Dropdown
+var ddRes = root.Q<DropdownField>("DdRes");
+if (ddRes != null)
+{
+    ddRes.choices = new List<string> { "256", "512", "1024", "2048", "4096" };
+    ddRes.RegisterValueChangedCallback(evt => {
+        if (simulator != null) int.TryParse(evt.newValue, out simulator.bakedResolution);
+    });
+}
+
+// SPP Slider
+
             var sldSpp = root.Q<SliderInt>("SldSamples");
             var lblSpp = root.Q<Label>("LblSamplesVal");
-            if (sldSpp != null && lblSpp != null)
-                sldSpp.RegisterValueChangedCallback(evt => lblSpp.text = evt.newValue.ToString());
+            if (sldSpp != null && lblSpp != null) sldSpp.RegisterValueChangedCallback(evt => lblSpp.text = evt.newValue.ToString());
 
-            // Reflectance Slider
             var sldRefl = root.Q<Slider>("SldRefl");
             var lblRefl = root.Q<Label>("LblReflVal");
-            if (sldRefl != null && lblRefl != null)
-            {
-                sldRefl.RegisterValueChangedCallback(evt => {
-                    lblRefl.text = evt.newValue.ToString("F2");
-                    UpdateSelectedMaterial();
-                });
-            }
-
-            // Transmittance Slider
+            if (sldRefl != null && lblRefl != null) sldRefl.RegisterValueChangedCallback(evt => { 
+                lblRefl.text = evt.newValue.ToString("F2");
+                UpdateSelectedMaterial(); 
+            });
+            
             var sldTrans = root.Q<Slider>("SldTrans");
             var lblTrans = root.Q<Label>("LblTransVal");
-            if (sldTrans != null && lblTrans != null)
-            {
-                sldTrans.RegisterValueChangedCallback(evt => {
-                    lblTrans.text = evt.newValue.ToString("F2");
-                    UpdateSelectedMaterial();
-                });
-            }
+            if (sldTrans != null && lblTrans != null) sldTrans.RegisterValueChangedCallback(evt => { 
+                lblTrans.text = evt.newValue.ToString("F2");
+                UpdateSelectedMaterial(); 
+            });
 
             if (picker != null) {
                 picker.OnObjectSelected += OnObjectSelected;
@@ -94,6 +94,20 @@ namespace ChronoLux.Project
             }
 
             ShowLauncher();
+        }
+
+        private void OnDisable()
+        {
+            if (picker != null) {
+                picker.OnObjectSelected -= OnObjectSelected;
+                picker.OnSelectionCleared -= OnSelectionCleared;
+            }
+        }
+
+        private void StartNavigation()
+        {
+            UnityEngine.Cursor.lockState = CursorLockMode.Locked;
+            UnityEngine.Cursor.visible = false;
         }
 
         public void ShowLauncher()
@@ -146,31 +160,23 @@ namespace ChronoLux.Project
         {
             if (_activeSelection == null) return;
             var sim = _activeSelection.GetComponent<SimulationMaterial>() ?? _activeSelection.AddComponent<SimulationMaterial>();
-            
-            var sldRefl = uiDocument.rootVisualElement.Q<Slider>("SldRefl");
-            var sldTrans = uiDocument.rootVisualElement.Q<Slider>("SldTrans");
-            
-            if (sldRefl != null && sldTrans != null)
-            {
-                float r = sldRefl.value;
-                float t = sldTrans.value;
-                
-                // Energy conservation (probabilistic selection logic)
-                float sum = r + t;
-                if (sum > 1.0f)
-                {
-                    r /= sum;
-                    t /= sldTrans.value > 0 ? sum : 1.0f; // Simplified re-normalization
-                    
-                    // Update UI to reflect the forced energy conservation if needed
-                    sldRefl.SetValueWithoutNotify(r);
-                    sldTrans.SetValueWithoutNotify(t);
-                    uiDocument.rootVisualElement.Q<Label>("LblReflVal").text = r.ToString("F2");
-                    uiDocument.rootVisualElement.Q<Label>("LblTransVal").text = t.ToString("F2");
-                }
+            var root = uiDocument.rootVisualElement;
+            var sldRefl = root.Q<Slider>("SldRefl");
+            var sldTrans = root.Q<Slider>("SldTrans");
+            var lblRefl = root.Q<Label>("LblReflVal");
+            var lblTrans = root.Q<Label>("LblTransVal");
 
-                sim.reflectance = r;
-                sim.transmittance = t;
+            if (sldRefl != null && sldTrans != null) {
+                float r = sldRefl.value; float t = sldTrans.value;
+                float sum = r + t; 
+                if (sum > 1.0f) { 
+                    r /= sum; t /= sum; 
+                    sldRefl.SetValueWithoutNotify(r); 
+                    sldTrans.SetValueWithoutNotify(t); 
+                }
+                if (lblRefl != null) lblRefl.text = r.ToString("F2");
+                if (lblTrans != null) lblTrans.text = t.ToString("F2");
+                sim.reflectance = r; sim.transmittance = t;
             }
         }
 
@@ -197,7 +203,7 @@ namespace ChronoLux.Project
             var inLat = root.Q<TextField>("InLat"); if (inLat != null) inLat.value = simulator.latitude.ToString("F3");
             var inLon = root.Q<TextField>("InLon"); if (inLon != null) inLon.value = simulator.longitude.ToString("F3");
             var sld = root.Q<SliderInt>("SldSamples"); if (sld != null) sld.value = simulator.samplesPerPixel;
-            var lbl = root.Q<Label>("LblSamplesVal"); if (lbl != null) lbl.text = simulator.samplesPerPixel.ToString();
+            var ddRes = root.Q<DropdownField>("DdRes"); if (ddRes != null) ddRes.value = simulator.bakedResolution.ToString();
         }
 
         private void RefreshProjectList()
@@ -229,12 +235,23 @@ namespace ChronoLux.Project
             var root = uiDocument.rootVisualElement;
             string name = root.Q<TextField>("InputProjectName").value;
             if (string.IsNullOrEmpty(name)) return;
-            _currentProject = new ChronoProject { projectName = name, modelFileName = _selectedModelFile };
+            
+            // SANITIZE PROJECT NAME
+            string safeName = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
+            
+            _currentProject = new ChronoProject { projectName = safeName, modelFileName = _selectedModelFile };
             ProjectManager.SaveProject(_currentProject);
+
+            if (simulator != null) simulator.ClearDoseMap();
             ShowDashboard();
         }
 
-        private void LoadExistingProject(string name) { _currentProject = ProjectManager.LoadProject(name); ShowDashboard(); }
+        private void LoadExistingProject(string name) 
+        { 
+            _currentProject = ProjectManager.LoadProject(name); 
+            if (simulator != null) simulator.ClearDoseMap();
+            ShowDashboard(); 
+        }
 
         private void PopulateMaterialCatalog()
         {
@@ -247,8 +264,23 @@ namespace ChronoLux.Project
                 var btn = new Button { text = preset.materialName };
                 btn.AddToClassList("button");
                 btn.style.width = 130; btn.style.height = 50;
+
+                if (preset.visualMaterial != null) {
+                    var tex = preset.visualMaterial.GetTexture("_BaseColorMap") as Texture2D;
+                    if (tex != null) {
+                        btn.style.backgroundImage = new StyleBackground(tex);
+                        btn.style.color = Color.white;
+                        btn.style.unityTextOutlineColor = Color.black;
+                        btn.style.unityTextOutlineWidth = 1f;
+                        btn.style.unityFontStyleAndWeight = FontStyle.Bold;
+                    }
+                }
+
                 btn.clicked += () => {
-                    if (picker != null) { picker.AssignMaterialToSelected(preset); OnObjectSelected(_activeSelection); }
+                    if (picker != null && _activeSelection != null) { 
+                        picker.AssignMaterialToSelected(preset); 
+                        OnObjectSelected(_activeSelection); 
+                    }
                 };
                 catalog.Add(btn);
             }
@@ -264,6 +296,63 @@ namespace ChronoLux.Project
                 var txtCoords = root.Q<Label>("TxtSunCoords"); if (txtCoords != null) txtCoords.text = $"ALT: {simulator.currentAltitude:F1}° | AZI: {simulator.currentAzimuth:F1}°";
                 var txtMax = root.Q<Label>("TxtMaxDose"); if (txtMax != null) txtMax.text = $"{simulator.maxDoseInScene:F0} Lux·h";
                 var prog = root.Q<ProgressBar>("ProgSim"); if (prog != null) prog.value = simulator.currentProgress;
+
+                // ── ANALYTICS ──
+                UpdateMetrologyAnalytics(root);
+            }
+        }
+
+        private void UpdateMetrologyAnalytics(VisualElement root)
+        {
+            var sensors = VirtualLuxSensor.AllSensors;
+            if (sensors.Count == 0) return;
+
+            float totalError = 0;
+            float totalLux = 0;
+            foreach (var s in sensors) {
+                totalError += Mathf.Abs(s.errorPercentage);
+                totalLux += s.currentLux;
+            }
+
+            var avgError = totalError / sensors.Count;
+            var lblError = root.Q<Label>("TxtErrorPct");
+            if (lblError != null) lblError.text = $"{avgError:F2}%";
+
+            // Risk Assessment (Simplified)
+            var lblRisk = root.Q<Label>("TxtRisk");
+            if (lblRisk != null) {
+                if (simulator.maxDoseInScene > 100000) { lblRisk.text = "CRITICAL"; lblRisk.style.color = Color.red; }
+                else if (simulator.maxDoseInScene > 50000) { lblRisk.text = "HIGH"; lblRisk.style.color = new Color(1f, 0.5f, 0f); }
+                else { lblRisk.text = "LOW"; lblRisk.style.color = Color.green; }
+            }
+
+            // Procedural Graph (Irradiance) - ONLY UPDATE IF SIMULATING
+            if (simulator.IsSimulating) {
+                UpdateIrradianceGraph(root, totalLux / sensors.Count);
+            }
+        }
+
+        private List<float> _irradianceHistory = new List<float>();
+        private void UpdateIrradianceGraph(VisualElement root, float currentAvgLux)
+        {
+            var container = root.Q<VisualElement>("GraphContainer");
+            if (container == null) return;
+
+            // Update history (limited to 50 samples)
+            if (Time.frameCount % 5 == 0) { // Throttle updates
+                _irradianceHistory.Add(currentAvgLux);
+                if (_irradianceHistory.Count > 50) _irradianceHistory.RemoveAt(0);
+
+                container.Clear();
+                float maxInHistory = 100f; // Baseline
+                foreach (var val in _irradianceHistory) if (val > maxInHistory) maxInHistory = val;
+
+                foreach (var val in _irradianceHistory) {
+                    var bar = new VisualElement();
+                    bar.AddToClassList("graph-bar");
+                    bar.style.height = Length.Percent((val / maxInHistory) * 100f);
+                    container.Add(bar);
+                }
             }
         }
     }

@@ -6,8 +6,7 @@ using System;
 namespace ChronoLux.Interaction
 {
     /// <summary>
-    /// Reverted to the confirmed working version. 
-    /// Handles selection via the center of the screen (Crosshair).
+    /// Optimized Object Picker: Fixed frame drops by removing redundant per-frame material updates.
     /// </summary>
     public class ObjectPicker : MonoBehaviour
     {
@@ -38,6 +37,15 @@ namespace ChronoLux.Interaction
             if (selectionShader != null) _highlightMat = new Material(selectionShader);
         }
 
+        private void OnDestroy()
+        {
+            if (_highlightMat != null)
+            {
+                if (Application.isPlaying) Destroy(_highlightMat);
+                else DestroyImmediate(_highlightMat);
+            }
+        }
+
         private void Update()
         {
             HandleHover();
@@ -50,29 +58,40 @@ namespace ChronoLux.Interaction
 
         private void HandleHover()
         {
-            // Raycast from the center of the screen (Crosshair)
             Ray ray = _cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
 
             if (Physics.Raycast(ray, out RaycastHit hit, 100f))
             {
                 GameObject hitObj = hit.collider.gameObject;
+
+                // Artifact Guard
+                if (hitObj.GetComponent<UVMapBaker>() != null || hitObj.GetComponentInParent<UVMapBaker>() != null)
+                {
+                    if (hoveredObject != null) { ClearHighlight(hoveredObject); hoveredObject = null; }
+                    return;
+                }
+
                 if (hitObj != hoveredObject)
                 {
-                    ClearHighlight(hoveredObject);
+                    // Only clear if it's NOT the selected object
+                    if (hoveredObject != null && hoveredObject != selectedObject) 
+                        ClearHighlight(hoveredObject);
+
                     hoveredObject = hitObj;
-                    ApplyHighlight(hoveredObject, hoverColor);
+
+                    // Only apply if it's NOT already the selected object (which has its own color)
+                    if (hoveredObject != selectedObject)
+                        ApplyHighlight(hoveredObject, hoverColor);
                 }
             }
             else
             {
                 if (hoveredObject != null)
                 {
-                    ClearHighlight(hoveredObject);
+                    if (hoveredObject != selectedObject) ClearHighlight(hoveredObject);
                     hoveredObject = null;
                 }
             }
-            
-            if (selectedObject != null) ApplyHighlight(selectedObject, selectColor);
         }
 
         private void HandleSelection()
@@ -80,6 +99,7 @@ namespace ChronoLux.Interaction
             if (hoveredObject != null)
             {
                 if (selectedObject != null) ClearHighlight(selectedObject);
+                
                 selectedObject = hoveredObject;
                 ApplyHighlight(selectedObject, selectColor);
                 OnObjectSelected?.Invoke(selectedObject);
@@ -98,10 +118,12 @@ namespace ChronoLux.Interaction
             Renderer r = obj.GetComponentInChildren<Renderer>();
             if (r == null) return;
 
+            // Set the color via PropertyBlock
             r.GetPropertyBlock(_propBlock);
             _propBlock.SetColor(_ID_GlowColor, color);
             r.SetPropertyBlock(_propBlock);
 
+            // Ensure the material pass exists
             Material[] mats = r.sharedMaterials;
             bool exists = false;
             foreach (var m in mats) if (m != null && m.shader == selectionShader) exists = true;
@@ -144,12 +166,17 @@ namespace ChronoLux.Interaction
             Renderer r = selectedObject.GetComponentInChildren<Renderer>();
             if (r == null) return;
 
-            ClearHighlight(selectedObject);
+            // Preserve the highlight while changing the base material
             r.sharedMaterial = preset.visualMaterial;
+            
             var sim = selectedObject.GetComponent<SimulationMaterial>() ?? selectedObject.AddComponent<SimulationMaterial>();
             sim.reflectance = preset.reflectance;
             sim.transmittance = preset.transmittance;
-            ApplyHighlight(selectedObject, selectColor);
+
+            // Re-apply the selection color to the PropertyBlock (which might have been reset)
+            r.GetPropertyBlock(_propBlock);
+            _propBlock.SetColor(_ID_GlowColor, selectColor);
+            r.SetPropertyBlock(_propBlock);
         }
     }
 }

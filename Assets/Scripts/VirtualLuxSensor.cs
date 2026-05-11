@@ -32,7 +32,8 @@ public class VirtualLuxSensor : MonoBehaviour
             errorPercent = 0f;
     }
 
-    public float SimulatedLux => simulatedLux;
+    public float currentLux => simulatedLux;
+    public float errorPercentage => errorPercent;
 
     private void OnDrawGizmos()
     {

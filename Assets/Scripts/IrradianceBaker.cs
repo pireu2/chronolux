@@ -161,6 +161,16 @@ public class IrradianceBaker : MonoBehaviour
 
     private uint _frameIndex = 0;
 
+    public void ClearDoseMap()
+    {
+        if (_doseMap == null) return;
+        var cmd = new CommandBuffer { name = "Reset DoseMap" };
+        cmd.SetRenderTarget(_doseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        Graphics.ExecuteCommandBuffer(cmd);
+        cmd.Release();
+    }
+
     public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, int samplesPerPixel, RenderTexture positionMap, RenderTexture normalMap)
     {
         if (!_isInitialized || positionMap == null || normalMap == null) return;

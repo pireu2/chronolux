@@ -26,6 +26,7 @@ public class LightDoseSimulator : MonoBehaviour
 
     [Header("Simulation Quality")]
     [Range(1, 64)] public int samplesPerPixel = 8;
+    public int bakedResolution = 1024;
 
     [Header("Scene References")]
     public Light sunLight;
@@ -36,12 +37,13 @@ public class LightDoseSimulator : MonoBehaviour
     [Header("Auto-Visualization (Read Only)")]
     [ReadOnly] public string simulatedTime = "–";
     [ReadOnly] public float maxDoseInScene = 0f;
+    [ReadOnly] public float surfaceCoverage = 0f;
     [ReadOnly] public float currentProgress = 0f;
     [ReadOnly] public int completedSteps = 0;
-    
-    // Exposed for UI readback
     [ReadOnly] public float currentAltitude = 0f;
     [ReadOnly] public float currentAzimuth = 0f;
+
+    public bool IsSimulating => _isSimulating;
 
     private bool _isSimulating = false;
     private IEnumerator _simulationEnumerator;
@@ -78,8 +80,8 @@ public class LightDoseSimulator : MonoBehaviour
     [ContextMenu("Run Simulation")]
     public void StartSimulation() {
         if (!ValidateReferences()) return;
-        if (baker.PositionMap == null) baker.Bake();
-        irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
+        if (baker.PositionMap == null || baker.PositionMap.width != bakedResolution) baker.Bake(bakedResolution);
+        irradianceBaker.Initialize(bakedResolution, bakedResolution);
         completedSteps = 0;
         _isSimulating = true;
         _simulationEnumerator = RunSimulationInternal();
@@ -88,6 +90,14 @@ public class LightDoseSimulator : MonoBehaviour
 
     [ContextMenu("Stop Simulation")]
     public void StopSimulation() { _isSimulating = false; _simulationEnumerator = null; }
+
+    [ContextMenu("Clear Dose Map")]
+    public void ClearDoseMap()
+    {
+        if (irradianceBaker != null) irradianceBaker.ClearDoseMap();
+        maxDoseInScene = 0;
+        ApplyDosePreview();
+    }
 
     [ContextMenu("Auto-Scale Visuals")]
     public void AutoScale() { FindMaxDose(true); ApplyDosePreview(); }
@@ -99,8 +109,8 @@ public class LightDoseSimulator : MonoBehaviour
     [ContextMenu("Test Static Bake (1 Hour)")]
     public void TestStaticBake() {
         if (!ValidateReferences()) return;
-        if (baker.PositionMap == null) baker.Bake();
-        irradianceBaker.Initialize(baker.PositionMap.width, baker.PositionMap.height);
+        if (baker.PositionMap == null || baker.PositionMap.width != bakedResolution) baker.Bake(bakedResolution);
+        irradianceBaker.Initialize(bakedResolution, bakedResolution);
         ApplySunPosition(new DateTime(year, 6, 21, 12, 0, 0));
         irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, 1.0f, samplesPerPixel, baker.PositionMap, baker.NormalMap);
         AutoScale();
@@ -123,7 +133,13 @@ public class LightDoseSimulator : MonoBehaviour
                 irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, deltaHours, samplesPerPixel, baker.PositionMap, baker.NormalMap);
                 completedSteps++;
                 currentProgress = ((float)currentDayIdx / totalDays) * 100f;
-                if (completedSteps % 10 == 0) { FindMaxDose(false); ApplyDosePreview(); SceneView.RepaintAll(); }
+                if (completedSteps % 10 == 0) { 
+                    FindMaxDose(false); 
+                    ApplyDosePreview(); 
+#if UNITY_EDITOR
+                    SceneView.RepaintAll(); 
+#endif
+                }
                 yield return null;
             }
         }
@@ -164,22 +180,29 @@ public class LightDoseSimulator : MonoBehaviour
         _readbackTex.Apply();
         RenderTexture.active = activeRT;
         float maxVal = 0f;
+        int hitCount = 0;
         var data = _readbackTex.GetRawTextureData<float>();
-        for (int i = 0; i < data.Length; i++) if (data[i] > maxVal) maxVal = data[i];
+        for (int i = 0; i < data.Length; i++) {
+            if (data[i] > maxVal) maxVal = data[i];
+            if (data[i] > 1e-4f) hitCount++;
+        }
         maxDoseInScene = maxVal;
+
+        // SCIENTIFIC NORMALIZATION:
+        // Divide hit pixels by the ACTUAL number of pixels the object occupies (ignoring UV empty space)
+        // We must scale the SurfacePixelCount to match our current downsampled 'res'
+        float downsampleRatio = (float)res / bakedResolution;
+        float expectedSurfaceArea = baker.SurfacePixelCount * (downsampleRatio * downsampleRatio);
+        surfaceCoverage = Mathf.Clamp(((float)hitCount / expectedSurfaceArea) * 100f, 0f, 100f);
     }
 
     private void ApplySunPosition(DateTime localTime) {
         SunCalculator.SunPosition sun = SunCalculator.Calculate(latitude, longitude, utcOffset, localTime);
         Vector3 sunDir = SunCalculator.ToWorldDirection(sun);
-        CurrentSunDirection = sunDir; 
-        CurrentBeamLux = sun.BeamLux; 
-        CurrentDiffuseLux = sun.DiffuseLux;
-        
+        CurrentSunDirection = sunDir; CurrentBeamLux = sun.BeamLux; CurrentDiffuseLux = sun.DiffuseLux;
         simulatedTime = localTime.ToString("yyyy-MM-dd HH:mm");
         currentAltitude = sun.AltitudeDeg;
         currentAzimuth = sun.AzimuthDeg;
-
         if (sunLight == null) return;
         if (!sun.IsAboveHorizon) { sunLight.enabled = false; return; }
         sunLight.enabled = true;

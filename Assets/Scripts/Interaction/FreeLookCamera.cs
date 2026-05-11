@@ -29,8 +29,16 @@ namespace ChronoLux.Interaction
             // 1. Handle Cursor Toggles
             if (Keyboard.current.escapeKey.wasPressedThisFrame)
             {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
+                if (Cursor.lockState == CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
             }
 
             // Click to lock (if not clicking on a UI element)

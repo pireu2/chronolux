@@ -4,6 +4,9 @@
     
     <ui:VisualElement name="Root" class="root-container">
         
+        <!-- Central Crosshair -->
+        <ui:VisualElement name="Crosshair" class="crosshair" />
+        
         <!-- ── VIEW 1: PROJECT LAUNCHER ── -->
         <ui:VisualElement name="LauncherScreen" class="launcher-screen">
             <ui:VisualElement class="launcher-card">
@@ -64,7 +67,10 @@
 
                     <ui:VisualElement class="module-card">
                         <ui:Label text="SIMULATION ENGINE" class="module-title" />
-                        <ui:VisualElement style="flex-direction: row; align-items: center;">
+                        
+                        <ui:DropdownField label="Resolution" name="DdRes" index="1" />
+
+                        <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 5px;">
                             <ui:SliderInt label="SPP" name="SldSamples" low-value="1" high-value="64" value="8" style="flex-grow: 1;" />
                             <ui:Label text="8" name="LblSamplesVal" style="width: 25px; -unity-text-align: middle-right; font-size: 10px;" />
                         </ui:VisualElement>
@@ -106,9 +112,21 @@
                         </ui:VisualElement>
                     </ui:VisualElement>
 
-                    <ui:VisualElement class="module-card" style="flex-grow: 1;">
-                        <ui:Label text="VIRTUAL SENSORS" class="module-title" />
-                        <ui:ScrollView name="SensorList" style="flex-grow: 1;" />
+                    <ui:VisualElement class="module-card">
+                        <ui:Label text="SCIENTIFIC ANALYTICS" class="module-title" />
+                        
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Metrology Error" class="stat-label" />
+                            <ui:Label text="0.00%" name="TxtErrorPct" class="stat-value" style="color: #00E5FF;" />
+                        </ui:VisualElement>
+
+                        <ui:VisualElement class="stat-row">
+                            <ui:Label text="Risk Level" class="stat-label" />
+                            <ui:Label text="LOW" name="TxtRisk" class="stat-value" style="color: #4CAF50;" />
+                        </ui:VisualElement>
+
+                        <ui:Label text="IRRADIANCE HISTORY (W/m²)" style="font-size: 9px; color: #555; margin-top: 15px;" />
+                        <ui:VisualElement name="GraphContainer" class="graph-container" />
                     </ui:VisualElement>
 
                 </ui:VisualElement>

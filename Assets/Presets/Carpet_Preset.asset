@@ -10,9 +10,9 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 8d5f264c49b958348afc92ba751d4709, type: 3}
-  m_Name: Glass_Preset
+  m_Name: Carpet_Preset
   m_EditorClassIdentifier: Assembly-CSharp::ChronoLux.Library.MaterialPreset
-  materialName: Clear Glass
-  reflectance: 0.08
-  transmittance: 0.84
-  visualMaterial: {fileID: 2100000, guid: 3a2569b8ee299b346979b84c31215859, type: 2}
+  materialName: Carpet
+  reflectance: 0.2
+  transmittance: 0
+  visualMaterial: {fileID: 2100000, guid: 6ff1917ac3dee714bbea505bdadcb06f, type: 2}
