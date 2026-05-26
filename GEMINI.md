@@ -28,20 +28,17 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **Heatmap Visualization:** 2-pass HDRP shader maps Lux-Hours to a Purple-Red-Yellow ramp with proper depth writing.
 - **Material Library Expansion:** Added scientifically accurate presets and high-quality CC0 textures for Brick, Glass, Mirror, Plaster, Hardwood, Carpet, and Grass.
 - **Enhanced UI UX:** Material catalog automatically displays physical texture maps on selection buttons, and cursor navigation toggles properly via the `ESC` key.
-- **Robust Runtime OBJ Loader:** Background-threaded parser with progress reporting and support for multi-mesh objects (e.g., walls, windows, floors) as individual selectable GameObjects.
-- **Artifact Normalization:** Automatic centering and scaling of imported models to a 2m baseline while maintaining user-defined root transformation overrides.
-- **Persistent Scene Setup:** Full serialization of artifact transformations (Position, Scale) and granular material assignments per sub-mesh, saved automatically to the project's JSON.
-- **Navigation Speed Boost:** Implemented a 10x velocity multiplier when holding the Shift key for efficient architectural exploration.
-- **Asynchronous Loading UX:** Added a non-blocking "LOADING ASSETS" overlay with a real-time progress bar and status updates.
 
 ## Immediate Next Steps (Project & Academic Polish)
 
-1. **Data Export System:** 
+1. **Runtime OBJ/Model Loading:** Implement a robust parser to dynamically load external `.obj` files (the high-fidelity 3D scans from the preservation entity and custom environment rooms).
+2. **Data Export System:**
    - Export accumulated DoseMaps as high-dynamic-range `.exr` files.
    - Export Virtual Lux Sensor telemetry and time-series data to `.csv` for use in the academic paper's graphs.
-2. **Scientific Validation Pass:** Conduct a rigorous mathematical review of the Monte Carlo integration, cosine weighting, and Perez model outputs to ensure absolute academic defensibility.
-3. **Advanced Metrology (Optional/Future):** Implement spectral sensitivity curves (e.g., CIE $V(\lambda)$) for wavelength-dependent damage calculation.
-4. **Academic Paper Writing:** Execute the simulations for Scenarios A, B, and C as defined in `paper_outline.md`, generate graphs, and draft the 6-8 page IEEE/ACM format article.
+3. **Scene Serialization:** Implement a system to save and load specific scenes/setups (artifact position, environment materials, sensor placements) via JSON.
+4. **Scientific Validation Pass:** Conduct a rigorous mathematical review of the Monte Carlo integration, cosine weighting, and Perez model outputs to ensure absolute academic defensibility.
+5. **Advanced Metrology (Optional/Future):** Implement spectral sensitivity curves (e.g., CIE $V(\lambda)$) for wavelength-dependent damage calculation.
+6. **Academic Paper Writing:** Execute the simulations for Scenarios A, B, and C as defined in `paper_outline.md`, generate graphs, and draft the 6-8 page IEEE/ACM format article.
 
 # Project Constraints & Tech Stack
 
