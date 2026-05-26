@@ -8,7 +8,10 @@ namespace ChronoLux.Project
     public class ChronoProject
     {
         public string projectName;
-        public string modelFileName; // Only the filename (e.g., "room.obj")
+        [Obsolete("Use artifactFileName instead. Kept for migration.")]
+        public string modelFileName; 
+        public string artifactFileName;
+        public List<string> environmentFileNames = new List<string>();
         
         [Header("Location")]
         public double latitude = 44.4268;
@@ -20,6 +23,10 @@ namespace ChronoLux.Project
         public int startDay = 1;
         public int endDay = 365;
         public int samplesPerPixel = 8;
+        
+        // Artifact Transformation
+        public Vector3 artifactPosition = Vector3.zero;
+        public Vector3 artifactScale = Vector3.one;
         
         // Dictionary mapping mesh object names to material preset names
         // Note: For JSON serialization, we'll use two lists to represent the dictionary

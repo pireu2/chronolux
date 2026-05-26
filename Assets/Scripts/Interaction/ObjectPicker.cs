@@ -48,6 +48,17 @@ namespace ChronoLux.Interaction
 
         private void Update()
         {
+            // Only allow selection while in Navigation Mode (Cursor Locked)
+            if (Cursor.lockState != CursorLockMode.Locked)
+            {
+                if (hoveredObject != null)
+                {
+                    if (hoveredObject != selectedObject) ClearHighlight(hoveredObject);
+                    hoveredObject = null;
+                }
+                return;
+            }
+
             HandleHover();
 
             if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
@@ -63,13 +74,6 @@ namespace ChronoLux.Interaction
             if (Physics.Raycast(ray, out RaycastHit hit, 100f))
             {
                 GameObject hitObj = hit.collider.gameObject;
-
-                // Artifact Guard
-                if (hitObj.GetComponent<UVMapBaker>() != null || hitObj.GetComponentInParent<UVMapBaker>() != null)
-                {
-                    if (hoveredObject != null) { ClearHighlight(hoveredObject); hoveredObject = null; }
-                    return;
-                }
 
                 if (hitObj != hoveredObject)
                 {
@@ -115,6 +119,11 @@ namespace ChronoLux.Interaction
         private void ApplyHighlight(GameObject obj, Color color)
         {
             if (obj == null || _highlightMat == null) return;
+
+            // Skip highlights for artifacts to keep heatmap visible
+            if (obj.GetComponent<UVMapBaker>() != null || obj.GetComponentInParent<UVMapBaker>() != null)
+                return;
+
             Renderer r = obj.GetComponentInChildren<Renderer>();
             if (r == null) return;
 

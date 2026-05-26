@@ -5,6 +5,7 @@ using ChronoLux.Library;
 using ChronoLux.Interaction;
 using System;
 using System.IO;
+using System.Globalization;
 
 namespace ChronoLux.Project
 {
@@ -16,16 +17,32 @@ namespace ChronoLux.Project
         public MaterialLibrary materialLibrary;
         public ObjectPicker picker;
         public FreeLookCamera freeLookCamera; 
+        public RuntimeModelLoader modelLoader; 
 
         [Header("State")]
         private ChronoProject _currentProject;
         private VisualElement _launcherScreen;
         private VisualElement _dashboardScreen;
+        private VisualElement _loadingScreen;
+        private ProgressBar _loadingBar;
+        private Label _loadingStatus;
+        
         private VisualElement _selectionPanel;
+        private VisualElement _transformControls;
+        private VisualElement _materialControls;
+
+        private TextField _inPosX, _inPosY, _inPosZ, _inScale;
+
         private ScrollView _projectList;
-        private ScrollView _modelList;
-        private string _selectedModelFile;
-        private GameObject _activeSelection;
+        private ScrollView _artifactModelList;
+        private ScrollView _environmentModelList;
+        private string _selectedArtifactFile;
+        private List<string> _selectedEnvironmentFiles = new List<string>();
+        
+        private GameObject _activeSelection;      // The specific mesh part clicked
+        private GameObject _activeTransformTarget; // The root object (for artifacts)
+
+        private float _saveTimer = -1f;
 
         private void OnEnable()
         {
@@ -34,17 +51,71 @@ namespace ChronoLux.Project
 
             _launcherScreen = root.Q<VisualElement>("LauncherScreen");
             _dashboardScreen = root.Q<VisualElement>("DashboardScreen");
+            _loadingScreen = root.Q<VisualElement>("LoadingScreen");
+            _loadingBar = root.Q<ProgressBar>("ProgLoading");
+            _loadingStatus = root.Q<Label>("TxtLoadingStatus");
+            
             _selectionPanel = root.Q<VisualElement>("SelectionPanel");
-            _projectList = root.Q<ScrollView>("ProjectList");
-            _modelList = root.Q<ScrollView>("ModelList");
+            _transformControls = root.Q<VisualElement>("TransformControls");
+            _materialControls = root.Q<VisualElement>("MaterialControls");
 
-            var btnLaunch = root.Q<Button>("BtnLaunch"); if (btnLaunch != null) btnLaunch.clicked += OnLaunchClicked;
-            var btnExit = root.Q<Button>("BtnExit"); if (btnExit != null) btnExit.clicked += ShowLauncher;
+            // Transform Controls
+            _inPosX = root.Q<TextField>("InPosX");
+            _inPosY = root.Q<TextField>("InPosY");
+            _inPosZ = root.Q<TextField>("InPosZ");
+            _inScale = root.Q<TextField>("InScale");
+
+            if (_inPosX != null) _inPosX.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.x = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inPosY != null) _inPosY.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.y = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inPosZ != null) _inPosZ.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.z = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inScale != null) _inScale.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    _activeTransformTarget.transform.localScale = Vector3.one * val; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+
+            if (modelLoader != null) {
+                modelLoader.loadingScreen = _loadingScreen;
+                modelLoader.progressBar = _loadingBar;
+                modelLoader.statusLabel = _loadingStatus;
+                
+                if (modelLoader.modelRoot == null) {
+                    var rootObj = GameObject.Find("SimulationRoot");
+                    if (rootObj != null) modelLoader.modelRoot = rootObj.transform;
+                }
+            }
+
+            _projectList = root.Q<ScrollView>("ProjectList");
+            _artifactModelList = root.Q<ScrollView>("ArtifactModelList");
+            _environmentModelList = root.Q<ScrollView>("EnvironmentModelList");
+            _selectedEnvironmentFiles = new List<string>();
+
+            var btnLaunch = root.Q<Button>("BtnLaunch"); 
+            if (btnLaunch != null) btnLaunch.clicked += OnLaunchClicked;
+
+            var btnExit = root.Q<Button>("BtnExit"); 
+            if (btnExit != null) btnExit.clicked += ShowLauncher;
             
             var btnStart = root.Q<Button>("BtnStart"); 
             if (btnStart != null) btnStart.clicked += () => { 
                 if (simulator != null) { 
-                    _irradianceHistory.Clear(); // Reset graph on new run
+                    _irradianceHistory.Clear();
                     SyncParamsToSimulator(); 
                     simulator.StartSimulation(); 
                 } 
@@ -55,20 +126,17 @@ namespace ChronoLux.Project
 
             var btnClear = root.Q<Button>("BtnClear");
             if (btnClear != null) btnClear.clicked += () => { if (simulator != null) simulator.ClearDoseMap(); };
-var btnNav = root.Q<Button>("BtnNav");
-if (btnNav != null) btnNav.clicked += StartNavigation;
 
-// Resolution Dropdown
-var ddRes = root.Q<DropdownField>("DdRes");
-if (ddRes != null)
-{
-    ddRes.choices = new List<string> { "256", "512", "1024", "2048", "4096" };
-    ddRes.RegisterValueChangedCallback(evt => {
-        if (simulator != null) int.TryParse(evt.newValue, out simulator.bakedResolution);
-    });
-}
+            var btnNav = root.Q<Button>("BtnNav");
+            if (btnNav != null) btnNav.clicked += StartNavigation;
 
-// SPP Slider
+            var ddRes = root.Q<DropdownField>("DdRes");
+            if (ddRes != null) {
+                ddRes.choices = new List<string> { "256", "512", "1024", "2048", "4096" };
+                ddRes.RegisterValueChangedCallback(evt => {
+                    if (simulator != null) int.TryParse(evt.newValue, out simulator.bakedResolution);
+                });
+            }
 
             var sldSpp = root.Q<SliderInt>("SldSamples");
             var lblSpp = root.Q<Label>("LblSamplesVal");
@@ -110,16 +178,34 @@ if (ddRes != null)
             UnityEngine.Cursor.visible = false;
         }
 
+        private void DebouncedSaveProject()
+        {
+            _saveTimer = 1.0f; // 1 second debounce
+        }
+
+        private void SaveActiveTransform()
+        {
+            if (_activeTransformTarget != null && _currentProject != null) {
+                _currentProject.artifactPosition = _activeTransformTarget.transform.localPosition;
+                _currentProject.artifactScale = _activeTransformTarget.transform.localScale;
+                ProjectManager.SaveProject(_currentProject);
+            }
+        }
+
         public void ShowLauncher()
         {
             if (_launcherScreen == null) return;
             _launcherScreen.style.display = DisplayStyle.Flex;
             if (_dashboardScreen != null) _dashboardScreen.style.display = DisplayStyle.None;
+            if (_loadingScreen != null) _loadingScreen.style.display = DisplayStyle.None;
             UnityEngine.Cursor.lockState = CursorLockMode.None;
             UnityEngine.Cursor.visible = true;
             if (freeLookCamera != null) freeLookCamera.enabled = false;
+            
+            if (modelLoader != null) modelLoader.ClearExistingModels();
+            
             RefreshProjectList();
-            RefreshModelList();
+            RefreshModelLists();
         }
 
         public void ShowDashboard()
@@ -129,6 +215,10 @@ if (ddRes != null)
             UnityEngine.Cursor.lockState = CursorLockMode.None;
             UnityEngine.Cursor.visible = true;
             if (freeLookCamera != null) freeLookCamera.enabled = true;
+
+            if (modelLoader != null) 
+                StartCoroutine(modelLoader.LoadProjectModelsAsync(_currentProject));
+
             PopulateMaterialCatalog();
             SyncSimulatorToUI();
         }
@@ -136,9 +226,35 @@ if (ddRes != null)
         private void OnObjectSelected(GameObject obj)
         {
             _activeSelection = obj;
+            _activeTransformTarget = null;
+
             if (_selectionPanel != null) _selectionPanel.style.display = DisplayStyle.Flex;
             var lblName = uiDocument.rootVisualElement.Q<Label>("TxtSelectedName");
             if (lblName != null) lblName.text = obj.name;
+
+            bool isArtifact = obj.GetComponent<UVMapBaker>() != null || obj.GetComponentInParent<UVMapBaker>() != null;
+
+            if (isArtifact)
+            {
+                _activeTransformTarget = obj.GetComponentInParent<UVMapBaker>()?.gameObject ?? obj;
+
+                if (_transformControls != null) _transformControls.style.display = DisplayStyle.Flex;
+                
+                // Sync inputs to actual (Invariant Culture)
+                var pos = _activeTransformTarget.transform.localPosition;
+                var scale = _activeTransformTarget.transform.localScale.x;
+                if (_inPosX != null) _inPosX.SetValueWithoutNotify(pos.x.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inPosY != null) _inPosY.SetValueWithoutNotify(pos.y.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inPosZ != null) _inPosZ.SetValueWithoutNotify(pos.z.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inScale != null) _inScale.SetValueWithoutNotify(scale.ToString("F2", CultureInfo.InvariantCulture));
+            }
+            else
+            {
+                if (_transformControls != null) _transformControls.style.display = DisplayStyle.None;
+            }
+
+            // Always show material controls if it's an environment piece or a specifically selected artifact part
+            if (_materialControls != null) _materialControls.style.display = DisplayStyle.Flex;
 
             var sim = obj.GetComponent<SimulationMaterial>();
             if (sim != null) {
@@ -154,7 +270,12 @@ if (ddRes != null)
             }
         }
 
-        private void OnSelectionCleared() { _activeSelection = null; if (_selectionPanel != null) _selectionPanel.style.display = DisplayStyle.None; }
+        private void OnSelectionCleared() 
+        { 
+            _activeSelection = null; 
+            _activeTransformTarget = null;
+            if (_selectionPanel != null) _selectionPanel.style.display = DisplayStyle.None; 
+        }
 
         private void UpdateSelectedMaterial()
         {
@@ -218,15 +339,40 @@ if (ddRes != null)
             }
         }
 
-        private void RefreshModelList()
+        private void RefreshModelLists()
         {
-            if (_modelList == null) return;
-            _modelList.Clear();
-            foreach (var file in ProjectManager.GetAvailableModels()) {
+            if (_artifactModelList == null || _environmentModelList == null) return;
+            _artifactModelList.Clear();
+            _environmentModelList.Clear();
+            _selectedEnvironmentFiles.Clear();
+            _selectedArtifactFile = null;
+
+            var models = ProjectManager.GetAvailableModels();
+            
+            foreach (var file in models) {
                 var btn = new Button { text = file };
                 btn.AddToClassList("list-item");
-                btn.clicked += () => _selectedModelFile = file;
-                _modelList.Add(btn);
+                btn.clicked += () => {
+                    _selectedArtifactFile = file;
+                    foreach (var child in _artifactModelList.Children()) child.style.backgroundColor = new StyleColor(StyleKeyword.Null);
+                    btn.style.backgroundColor = new Color(0, 0.5f, 0.5f);
+                };
+                _artifactModelList.Add(btn);
+            }
+
+            foreach (var file in models) {
+                var btn = new Button { text = file };
+                btn.AddToClassList("list-item");
+                btn.clicked += () => {
+                    if (_selectedEnvironmentFiles.Contains(file)) {
+                        _selectedEnvironmentFiles.Remove(file);
+                        btn.style.backgroundColor = new StyleColor(StyleKeyword.Null);
+                    } else {
+                        _selectedEnvironmentFiles.Add(file);
+                        btn.style.backgroundColor = new Color(0, 0.5f, 0.5f);
+                    }
+                };
+                _environmentModelList.Add(btn);
             }
         }
 
@@ -236,10 +382,13 @@ if (ddRes != null)
             string name = root.Q<TextField>("InputProjectName").value;
             if (string.IsNullOrEmpty(name)) return;
             
-            // SANITIZE PROJECT NAME
             string safeName = string.Join("_", name.Split(Path.GetInvalidFileNameChars()));
             
-            _currentProject = new ChronoProject { projectName = safeName, modelFileName = _selectedModelFile };
+            _currentProject = new ChronoProject { 
+                projectName = safeName, 
+                artifactFileName = _selectedArtifactFile,
+                environmentFileNames = new List<string>(_selectedEnvironmentFiles)
+            };
             ProjectManager.SaveProject(_currentProject);
 
             if (simulator != null) simulator.ClearDoseMap();
@@ -279,6 +428,11 @@ if (ddRes != null)
                 btn.clicked += () => {
                     if (picker != null && _activeSelection != null) { 
                         picker.AssignMaterialToSelected(preset); 
+                        if (_currentProject != null) {
+                            string uniqueKey = GetObjectKey(_activeSelection);
+                            _currentProject.SetMaterial(uniqueKey, preset.materialName);
+                            ProjectManager.SaveProject(_currentProject);
+                        }
                         OnObjectSelected(_activeSelection); 
                     }
                 };
@@ -286,8 +440,21 @@ if (ddRes != null)
             }
         }
 
+        private string GetObjectKey(GameObject go)
+        {
+            if (go == null) return "";
+            if (go.transform.parent != null && modelLoader != null && go.transform.parent != modelLoader.modelRoot)
+                return $"{go.transform.parent.name}/{go.name}";
+            return go.name;
+        }
+
         private void Update()
         {
+            if (_saveTimer > 0) {
+                _saveTimer -= Time.deltaTime;
+                if (_saveTimer <= 0) SaveActiveTransform();
+            }
+
             if (simulator == null) return;
             if (_dashboardScreen != null && _dashboardScreen.style.display == DisplayStyle.Flex)
             {
@@ -297,7 +464,6 @@ if (ddRes != null)
                 var txtMax = root.Q<Label>("TxtMaxDose"); if (txtMax != null) txtMax.text = $"{simulator.maxDoseInScene:F0} Lux·h";
                 var prog = root.Q<ProgressBar>("ProgSim"); if (prog != null) prog.value = simulator.currentProgress;
 
-                // ── ANALYTICS ──
                 UpdateMetrologyAnalytics(root);
             }
         }
@@ -318,7 +484,6 @@ if (ddRes != null)
             var lblError = root.Q<Label>("TxtErrorPct");
             if (lblError != null) lblError.text = $"{avgError:F2}%";
 
-            // Risk Assessment (Simplified)
             var lblRisk = root.Q<Label>("TxtRisk");
             if (lblRisk != null) {
                 if (simulator.maxDoseInScene > 100000) { lblRisk.text = "CRITICAL"; lblRisk.style.color = Color.red; }
@@ -326,7 +491,6 @@ if (ddRes != null)
                 else { lblRisk.text = "LOW"; lblRisk.style.color = Color.green; }
             }
 
-            // Procedural Graph (Irradiance) - ONLY UPDATE IF SIMULATING
             if (simulator.IsSimulating) {
                 UpdateIrradianceGraph(root, totalLux / sensors.Count);
             }
@@ -338,13 +502,12 @@ if (ddRes != null)
             var container = root.Q<VisualElement>("GraphContainer");
             if (container == null) return;
 
-            // Update history (limited to 50 samples)
-            if (Time.frameCount % 5 == 0) { // Throttle updates
+            if (Time.frameCount % 5 == 0) {
                 _irradianceHistory.Add(currentAvgLux);
                 if (_irradianceHistory.Count > 50) _irradianceHistory.RemoveAt(0);
 
                 container.Clear();
-                float maxInHistory = 100f; // Baseline
+                float maxInHistory = 100f;
                 foreach (var val in _irradianceHistory) if (val > maxInHistory) maxInHistory = val;
 
                 foreach (var val in _irradianceHistory) {
