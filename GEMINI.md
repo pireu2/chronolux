@@ -28,6 +28,7 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **Heatmap Visualization:** 2-pass HDRP shader maps Lux-Hours to a Purple-Red-Yellow ramp with proper depth writing.
 - **Material Library Expansion:** Added scientifically accurate presets and high-quality CC0 textures for Brick, Glass, Mirror, Plaster, Hardwood, Carpet, and Grass.
 - **Enhanced UI UX:** Material catalog automatically displays physical texture maps on selection buttons, and cursor navigation toggles properly via the `ESC` key.
+- **UV Space Baker:** Fixed Z-clipping (Z=0.5) and Y-axis inversion for HDRP/DX12 RenderTextures.
 
 ## Immediate Next Steps (Project & Academic Polish)
 
