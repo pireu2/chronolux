@@ -23,8 +23,15 @@
                     <ui:VisualElement class="launcher-column">
                         <ui:Label text="CREATE NEW PROJECT" class="module-title" />
                         <ui:TextField label="Project Name" name="InputProjectName" />
-                        <ui:Label text="Model Repository (.obj)" style="margin-top: 15px; color: #666; font-size: 10px;" />
-                        <ui:ScrollView name="ModelList" style="height: 220px; background-color: #1a1a1a; border-radius: 4px; margin-top: 5px;" />
+                        
+                        <ui:Label text="Artifact Model (.obj)" style="margin-top: 15px; color: #666; font-size: 10px;" />
+                        <ui:Label text="Select a single OBJ file. Must contain only one mesh." style="color: #444; font-size: 9px;" />
+                        <ui:ScrollView name="ArtifactModelList" style="height: 100px; background-color: #1a1a1a; border-radius: 4px; margin-top: 5px;" />
+
+                        <ui:Label text="Environment Models (.obj)" style="margin-top: 15px; color: #666; font-size: 10px;" />
+                        <ui:Label text="Select multiple OBJ files to construct the environment." style="color: #444; font-size: 9px;" />
+                        <ui:ScrollView name="EnvironmentModelList" style="height: 100px; background-color: #1a1a1a; border-radius: 4px; margin-top: 5px;" />
+
                         <ui:VisualElement style="flex-grow: 1;" />
                         <ui:Button text="INITIALIZE PROJECT" name="BtnLaunch" class="button button-primary" style="height: 45px; margin-top: 10px;" />
                     </ui:VisualElement>
@@ -99,16 +106,31 @@
                     <!-- SELECTION PANEL with SLIDERS -->
                     <ui:VisualElement name="SelectionPanel" class="module-card" style="display: none;">
                         <ui:Label text="OBJECT PROPERTIES" class="module-title" />
-                        <ui:Label text="Object Name" name="TxtSelectedName" style="color: #666; font-size: 10px; margin-bottom: 5px;" />
+                        <ui:Label text="Object Name" name="TxtSelectedName" style="color: #666; font-size: 10px; margin-bottom: 10px;" />
                         
-                        <ui:VisualElement style="flex-direction: row; align-items: center;">
-                            <ui:Slider label="Refl" name="SldRefl" low-value="0" high-value="1" style="flex-grow: 1;" />
-                            <ui:Label text="0.00" name="LblReflVal" style="width: 35px; -unity-text-align: middle-right; font-size: 10px;" />
+                        <!-- TRANSFORM SECTION (For Artifacts) -->
+                        <ui:VisualElement name="TransformControls" style="display: none; margin-bottom: 10px; padding-bottom: 8px; border-bottom-width: 1px; border-bottom-color: #333;">
+                            <ui:Label text="TRANSFORM" style="color: #888; font-size: 8px; margin-bottom: 4px; -unity-font-style: bold;" />
+                            
+                            <ui:TextField label="Pos X" name="InPosX" value="0.0" style="margin-bottom: 2px;" />
+                            <ui:TextField label="Pos Y" name="InPosY" value="0.0" style="margin-bottom: 2px;" />
+                            <ui:TextField label="Pos Z" name="InPosZ" value="0.0" style="margin-bottom: 2px;" />
+                            
+                            <ui:VisualElement style="height: 4px;" />
+                            <ui:TextField label="Scale" name="InScale" value="1.0" style="flex-grow: 1;" />
                         </ui:VisualElement>
 
-                        <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 5px;">
-                            <ui:Slider label="Trans" name="SldTrans" low-value="0" high-value="1" style="flex-grow: 1;" />
-                            <ui:Label text="0.00" name="LblTransVal" style="width: 35px; -unity-text-align: middle-right; font-size: 10px;" />
+                        <ui:VisualElement name="MaterialControls">
+                            <ui:Label text="SIMULATION PARAMETERS" style="color: #888; font-size: 8px; margin-bottom: 4px; -unity-font-style: bold;" />
+                            <ui:VisualElement style="flex-direction: row; align-items: center;">
+                                <ui:Slider label="Refl" name="SldRefl" low-value="0" high-value="1" style="flex-grow: 1;" />
+                                <ui:Label text="0.00" name="LblReflVal" style="width: 30px; -unity-text-align: middle-right; font-size: 9px;" />
+                            </ui:VisualElement>
+
+                            <ui:VisualElement style="flex-direction: row; align-items: center; margin-top: 2px;">
+                                <ui:Slider label="Trans" name="SldTrans" low-value="0" high-value="1" style="flex-grow: 1;" />
+                                <ui:Label text="0.00" name="LblTransVal" style="width: 30px; -unity-text-align: middle-right; font-size: 9px;" />
+                            </ui:VisualElement>
                         </ui:VisualElement>
                     </ui:VisualElement>
 
@@ -139,6 +161,15 @@
                 <ui:ScrollView name="MaterialCatalog" orientation="Horizontal" style="flex-grow: 1;" />
             </ui:VisualElement>
 
+        </ui:VisualElement>
+
+        <!-- ── VIEW 3: LOADING OVERLAY ── -->
+        <ui:VisualElement name="LoadingScreen" style="position: absolute; width: 100%; height: 100%; background-color: rgba(0,0,0,0.85); display: none; align-items: center; justify-content: center;">
+            <ui:VisualElement style="width: 400px; padding: 30px; background-color: #1e1e1e; border-radius: 8px; border-width: 1px; border-color: #00E5FF;">
+                <ui:Label text="LOADING ASSETS..." style="color: white; font-size: 18px; -unity-font-style: bold; margin-bottom: 20px; -unity-text-align: middle-center;" />
+                <ui:Label name="TxtLoadingStatus" text="Initializing parser..." style="color: #666; font-size: 11px; margin-bottom: 5px;" />
+                <ui:ProgressBar name="ProgLoading" value="0" />
+            </ui:VisualElement>
         </ui:VisualElement>
 
     </ui:VisualElement>
