@@ -8,6 +8,8 @@ namespace ChronoLux.Project
     public class ChronoProject
     {
         public string projectName;
+        [Obsolete("Use artifactFileName instead. Kept for migration.")]
+        public string modelFileName; 
         public string artifactFileName;
         public List<string> environmentFileNames = new List<string>();
         

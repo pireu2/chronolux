@@ -5,6 +5,7 @@ using ChronoLux.Library;
 using ChronoLux.Interaction;
 using System;
 using System.IO;
+using System.Globalization;
 
 namespace ChronoLux.Project
 {
@@ -37,7 +38,11 @@ namespace ChronoLux.Project
         private ScrollView _environmentModelList;
         private string _selectedArtifactFile;
         private List<string> _selectedEnvironmentFiles = new List<string>();
-        private GameObject _activeSelection;
+        
+        private GameObject _activeSelection;      // The specific mesh part clicked
+        private GameObject _activeTransformTarget; // The root object (for artifacts)
+
+        private float _saveTimer = -1f;
 
         private void OnEnable()
         {
@@ -60,15 +65,40 @@ namespace ChronoLux.Project
             _inPosZ = root.Q<TextField>("InPosZ");
             _inScale = root.Q<TextField>("InScale");
 
-            if (_inPosX != null) _inPosX.RegisterValueChangedCallback(evt => { if (_activeSelection != null && float.TryParse(evt.newValue, out float val)) { var p = _activeSelection.transform.localPosition; p.x = val; _activeSelection.transform.localPosition = p; SaveActiveTransform(); } });
-            if (_inPosY != null) _inPosY.RegisterValueChangedCallback(evt => { if (_activeSelection != null && float.TryParse(evt.newValue, out float val)) { var p = _activeSelection.transform.localPosition; p.y = val; _activeSelection.transform.localPosition = p; SaveActiveTransform(); } });
-            if (_inPosZ != null) _inPosZ.RegisterValueChangedCallback(evt => { if (_activeSelection != null && float.TryParse(evt.newValue, out float val)) { var p = _activeSelection.transform.localPosition; p.z = val; _activeSelection.transform.localPosition = p; SaveActiveTransform(); } });
-            if (_inScale != null) _inScale.RegisterValueChangedCallback(evt => { if (_activeSelection != null && float.TryParse(evt.newValue, out float val)) { _activeSelection.transform.localScale = Vector3.one * val; SaveActiveTransform(); } });
+            if (_inPosX != null) _inPosX.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.x = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inPosY != null) _inPosY.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.y = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inPosZ != null) _inPosZ.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    var p = _activeTransformTarget.transform.localPosition; p.z = val; _activeTransformTarget.transform.localPosition = p; 
+                    DebouncedSaveProject(); 
+                } 
+            });
+            if (_inScale != null) _inScale.RegisterValueChangedCallback(evt => { 
+                if (_activeTransformTarget != null && float.TryParse(evt.newValue, NumberStyles.Any, CultureInfo.InvariantCulture, out float val)) { 
+                    _activeTransformTarget.transform.localScale = Vector3.one * val; 
+                    DebouncedSaveProject(); 
+                } 
+            });
 
             if (modelLoader != null) {
                 modelLoader.loadingScreen = _loadingScreen;
                 modelLoader.progressBar = _loadingBar;
                 modelLoader.statusLabel = _loadingStatus;
+                
+                if (modelLoader.modelRoot == null) {
+                    var rootObj = GameObject.Find("SimulationRoot");
+                    if (rootObj != null) modelLoader.modelRoot = rootObj.transform;
+                }
             }
 
             _projectList = root.Q<ScrollView>("ProjectList");
@@ -148,11 +178,16 @@ namespace ChronoLux.Project
             UnityEngine.Cursor.visible = false;
         }
 
+        private void DebouncedSaveProject()
+        {
+            _saveTimer = 1.0f; // 1 second debounce
+        }
+
         private void SaveActiveTransform()
         {
-            if (_activeSelection != null && _currentProject != null) {
-                _currentProject.artifactPosition = _activeSelection.transform.localPosition;
-                _currentProject.artifactScale = _activeSelection.transform.localScale;
+            if (_activeTransformTarget != null && _currentProject != null) {
+                _currentProject.artifactPosition = _activeTransformTarget.transform.localPosition;
+                _currentProject.artifactScale = _activeTransformTarget.transform.localScale;
                 ProjectManager.SaveProject(_currentProject);
             }
         }
@@ -191,6 +226,8 @@ namespace ChronoLux.Project
         private void OnObjectSelected(GameObject obj)
         {
             _activeSelection = obj;
+            _activeTransformTarget = null;
+
             if (_selectionPanel != null) _selectionPanel.style.display = DisplayStyle.Flex;
             var lblName = uiDocument.rootVisualElement.Q<Label>("TxtSelectedName");
             if (lblName != null) lblName.text = obj.name;
@@ -199,42 +236,44 @@ namespace ChronoLux.Project
 
             if (isArtifact)
             {
-                var rootObj = obj.GetComponentInParent<UVMapBaker>()?.gameObject ?? obj;
-                _activeSelection = rootObj;
+                _activeTransformTarget = obj.GetComponentInParent<UVMapBaker>()?.gameObject ?? obj;
 
                 if (_transformControls != null) _transformControls.style.display = DisplayStyle.Flex;
-                if (_materialControls != null) _materialControls.style.display = DisplayStyle.None;
-
-                var pos = _activeSelection.transform.localPosition;
-                var scale = _activeSelection.transform.localScale.x;
-                if (_inPosX != null) _inPosX.SetValueWithoutNotify(pos.x.ToString("F2"));
-                if (_inPosY != null) _inPosY.SetValueWithoutNotify(pos.y.ToString("F2"));
-                if (_inPosZ != null) _inPosZ.SetValueWithoutNotify(pos.z.ToString("F2"));
-                if (_inScale != null) _inScale.SetValueWithoutNotify(scale.ToString("F2"));
+                
+                // Sync inputs to actual (Invariant Culture)
+                var pos = _activeTransformTarget.transform.localPosition;
+                var scale = _activeTransformTarget.transform.localScale.x;
+                if (_inPosX != null) _inPosX.SetValueWithoutNotify(pos.x.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inPosY != null) _inPosY.SetValueWithoutNotify(pos.y.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inPosZ != null) _inPosZ.SetValueWithoutNotify(pos.z.ToString("F2", CultureInfo.InvariantCulture));
+                if (_inScale != null) _inScale.SetValueWithoutNotify(scale.ToString("F2", CultureInfo.InvariantCulture));
             }
             else
             {
                 if (_transformControls != null) _transformControls.style.display = DisplayStyle.None;
-                if (_materialControls != null) _materialControls.style.display = DisplayStyle.Flex;
+            }
 
-                var sim = obj.GetComponent<SimulationMaterial>();
-                if (sim != null) {
-                    var sldRefl = uiDocument.rootVisualElement.Q<Slider>("SldRefl");
-                    var sldTrans = uiDocument.rootVisualElement.Q<Slider>("SldTrans");
-                    var lblRefl = uiDocument.rootVisualElement.Q<Label>("LblReflVal");
-                    var lblTrans = uiDocument.rootVisualElement.Q<Label>("LblTransVal");
+            // Always show material controls if it's an environment piece or a specifically selected artifact part
+            if (_materialControls != null) _materialControls.style.display = DisplayStyle.Flex;
 
-                    if (sldRefl != null) sldRefl.SetValueWithoutNotify(sim.reflectance);
-                    if (sldTrans != null) sldTrans.SetValueWithoutNotify(sim.transmittance);
-                    if (lblRefl != null) lblRefl.text = sim.reflectance.ToString("F2");
-                    if (lblTrans != null) lblTrans.text = sim.transmittance.ToString("F2");
-                }
+            var sim = obj.GetComponent<SimulationMaterial>();
+            if (sim != null) {
+                var sldRefl = uiDocument.rootVisualElement.Q<Slider>("SldRefl");
+                var sldTrans = uiDocument.rootVisualElement.Q<Slider>("SldTrans");
+                var lblRefl = uiDocument.rootVisualElement.Q<Label>("LblReflVal");
+                var lblTrans = uiDocument.rootVisualElement.Q<Label>("LblTransVal");
+
+                if (sldRefl != null) sldRefl.SetValueWithoutNotify(sim.reflectance);
+                if (sldTrans != null) sldTrans.SetValueWithoutNotify(sim.transmittance);
+                if (lblRefl != null) lblRefl.text = sim.reflectance.ToString("F2");
+                if (lblTrans != null) lblTrans.text = sim.transmittance.ToString("F2");
             }
         }
 
         private void OnSelectionCleared() 
         { 
             _activeSelection = null; 
+            _activeTransformTarget = null;
             if (_selectionPanel != null) _selectionPanel.style.display = DisplayStyle.None; 
         }
 
@@ -390,7 +429,8 @@ namespace ChronoLux.Project
                     if (picker != null && _activeSelection != null) { 
                         picker.AssignMaterialToSelected(preset); 
                         if (_currentProject != null) {
-                            _currentProject.SetMaterial(_activeSelection.name, preset.materialName);
+                            string uniqueKey = GetObjectKey(_activeSelection);
+                            _currentProject.SetMaterial(uniqueKey, preset.materialName);
                             ProjectManager.SaveProject(_currentProject);
                         }
                         OnObjectSelected(_activeSelection); 
@@ -400,8 +440,21 @@ namespace ChronoLux.Project
             }
         }
 
+        private string GetObjectKey(GameObject go)
+        {
+            if (go == null) return "";
+            if (go.transform.parent != null && modelLoader != null && go.transform.parent != modelLoader.modelRoot)
+                return $"{go.transform.parent.name}/{go.name}";
+            return go.name;
+        }
+
         private void Update()
         {
+            if (_saveTimer > 0) {
+                _saveTimer -= Time.deltaTime;
+                if (_saveTimer <= 0) SaveActiveTransform();
+            }
+
             if (simulator == null) return;
             if (_dashboardScreen != null && _dashboardScreen.style.display == DisplayStyle.Flex)
             {

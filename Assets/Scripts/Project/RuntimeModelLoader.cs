@@ -23,6 +23,7 @@ namespace ChronoLux.Project
 
         private GameObject _artifactInstance;
         private List<GameObject> _environmentInstances = new List<GameObject>();
+        private Material _defaultMaterial;
 
         public IEnumerator LoadProjectModelsAsync(ChronoProject project)
         {
@@ -36,14 +37,18 @@ namespace ChronoLux.Project
                 yield break;
             }
 
-            // 1. Load Artifact
-            if (!string.IsNullOrEmpty(project.artifactFileName))
+            // 1. Load Artifact (with migration for legacy projects)
+            string artifactFile = !string.IsNullOrEmpty(project.artifactFileName) ? project.artifactFileName : project.modelFileName;
+            
+            if (!string.IsNullOrEmpty(artifactFile))
             {
-                string path = Path.Combine(ProjectManager.ModelFolder, project.artifactFileName);
-                UpdateProgress(0.1f, $"Loading artifact: {project.artifactFileName}");
+                string path = Path.Combine(ProjectManager.ModelFolder, artifactFile);
+                UpdateProgress(0.1f, $"Loading artifact: {artifactFile}");
                 
-                string objText = File.ReadAllText(path);
-                var parseTask = Task.Run(() => SimpleObjLoader.ParseObj(objText));
+                var parseTask = Task.Run(() => {
+                    if (!File.Exists(path)) return null;
+                    return SimpleObjLoader.ParseObj(File.ReadAllText(path));
+                });
                 
                 while (!parseTask.IsCompleted) {
                     UpdateProgress(0.1f, "Parsing artifact geometry...");
@@ -52,7 +57,7 @@ namespace ChronoLux.Project
 
                 if (parseTask.IsCompletedSuccessfully && parseTask.Result != null && parseTask.Result.Count > 0) {
                     var dataList = parseTask.Result;
-                    _artifactInstance = new GameObject(Path.GetFileNameWithoutExtension(project.artifactFileName));
+                    _artifactInstance = new GameObject(Path.GetFileNameWithoutExtension(artifactFile));
                     if (_artifactInstance != null) {
                         _artifactInstance.transform.SetParent(modelRoot);
                         _artifactInstance.transform.localPosition = Vector3.zero;
@@ -60,7 +65,8 @@ namespace ChronoLux.Project
 
                         foreach (var data in dataList) {
                             GameObject child = CreateGameObjectFromData(data, artifactMaterial);
-                            child.transform.SetParent(_artifactInstance.transform);
+                            if (child == null) continue;
+                            child.transform.SetParent(_artifactInstance.transform, false);
                             child.transform.localPosition = Vector3.zero;
                             SetupArtifactPart(child, project); 
                         }
@@ -88,8 +94,10 @@ namespace ChronoLux.Project
                     string path = Path.Combine(ProjectManager.ModelFolder, fileName);
                     UpdateProgress(0.5f + (i * step), $"Loading environment: {fileName}");
 
-                    string objText = File.ReadAllText(path);
-                    var parseTask = Task.Run(() => SimpleObjLoader.ParseObj(objText));
+                    var parseTask = Task.Run(() => {
+                        if (!File.Exists(path)) return null;
+                        return SimpleObjLoader.ParseObj(File.ReadAllText(path));
+                    });
                     
                     while (!parseTask.IsCompleted) yield return null;
 
@@ -102,7 +110,8 @@ namespace ChronoLux.Project
 
                         foreach (var data in dataList) {
                             GameObject child = CreateGameObjectFromData(data, null);
-                            child.transform.SetParent(envRoot.transform);
+                            if (child == null) continue;
+                            child.transform.SetParent(envRoot.transform, false);
                             child.transform.localPosition = Vector3.zero;
                             SetupEnvironmentPart(child, project);
                         }
@@ -123,7 +132,12 @@ namespace ChronoLux.Project
             GameObject go = new GameObject(data.name);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
-            renderer.material = customMaterial != null ? customMaterial : new Material(Shader.Find("HDRP/Lit"));
+            
+            if (customMaterial != null) renderer.sharedMaterial = customMaterial;
+            else {
+                if (_defaultMaterial == null) _defaultMaterial = new Material(Shader.Find("HDRP/Lit"));
+                renderer.sharedMaterial = _defaultMaterial;
+            }
             return go;
         }
 
@@ -203,8 +217,11 @@ namespace ChronoLux.Project
         {
             if (project == null || materialLibrary == null) return false;
 
-            int idx = project.objectNames.IndexOf(go.name);
-            if (idx >= 0)
+            // Use hierarchy path as key to avoid collisions
+            string uniqueKey = GetObjectKey(go);
+            int idx = project.objectNames.IndexOf(uniqueKey);
+            
+            if (idx >= 0 && idx < project.materialPresetNames.Count)
             {
                 string presetName = project.materialPresetNames[idx];
                 var preset = materialLibrary.presets.Find(p => p.materialName == presetName);
@@ -222,6 +239,14 @@ namespace ChronoLux.Project
                 }
             }
             return false;
+        }
+
+        private string GetObjectKey(GameObject go)
+        {
+            // Key format: RootName/MeshName
+            if (go.transform.parent != null && go.transform.parent != modelRoot)
+                return $"{go.transform.parent.name}/{go.name}";
+            return go.name;
         }
 
         public void ClearExistingModels()

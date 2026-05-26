@@ -65,33 +65,40 @@ namespace ChronoLux.Project
                     case "vn":
                         if (parts.Length >= 4)
                             sourceNormals.Add(new Vector3(-float.Parse(parts[1], CultureInfo.InvariantCulture), 
-                                                          float.Parse(parts[2], CultureInfo.InvariantCulture), 
-                                                          float.Parse(parts[3], CultureInfo.InvariantCulture)));
+                                                              float.Parse(parts[2], CultureInfo.InvariantCulture), 
+                                                              float.Parse(parts[3], CultureInfo.InvariantCulture)));
                         break;
                     case "f":
                         List<int> faceIndices = new List<int>();
                         for (int k = 1; k < parts.Length; k++)
                         {
                             string[] subParts = parts[k].Split('/');
-                            ObjVertex vert = new ObjVertex();
+                            ObjVertex vert = new ObjVertex { v = -1, uv = -1, n = -1 };
                             
-                            if (subParts.Length > 0 && !string.IsNullOrEmpty(subParts[0]))
-                                vert.v = int.Parse(subParts[0]) - 1;
+                            // 1. Parse indices and handle negative relative indices
+                            if (subParts.Length > 0 && int.TryParse(subParts[0], out int vIdx))
+                                vert.v = (vIdx < 0) ? sourceVertices.Count + vIdx : vIdx - 1;
                             
-                            if (subParts.Length > 1 && !string.IsNullOrEmpty(subParts[1])) 
-                                vert.uv = int.Parse(subParts[1]) - 1;
-                            else vert.uv = -1;
+                            if (subParts.Length > 1 && !string.IsNullOrEmpty(subParts[1]) && int.TryParse(subParts[1], out int uvIdx))
+                                vert.uv = (uvIdx < 0) ? sourceUVs.Count + uvIdx : uvIdx - 1;
                             
-                            if (subParts.Length > 2 && !string.IsNullOrEmpty(subParts[2])) 
-                                vert.n = int.Parse(subParts[2]) - 1;
-                            else vert.n = -1;
+                            if (subParts.Length > 2 && !string.IsNullOrEmpty(subParts[2]) && int.TryParse(subParts[2], out int nIdx))
+                                vert.n = (nIdx < 0) ? sourceNormals.Count + nIdx : nIdx - 1;
+
+                            if (vert.v < 0 || vert.v >= sourceVertices.Count) continue;
 
                             if (!vertexCache.TryGetValue(vert, out int index))
                             {
                                 index = currentMesh.vertices.Count;
                                 currentMesh.vertices.Add(sourceVertices[vert.v]);
+                                
+                                // 2. Sync UVs and Normals (Always append placeholders if missing)
                                 if (vert.uv >= 0 && vert.uv < sourceUVs.Count) currentMesh.uvs.Add(sourceUVs[vert.uv]);
+                                else currentMesh.uvs.Add(Vector2.zero);
+
                                 if (vert.n >= 0 && vert.n < sourceNormals.Count) currentMesh.normals.Add(sourceNormals[vert.n]);
+                                else currentMesh.normals.Add(Vector3.zero);
+
                                 vertexCache.Add(vert, index);
                             }
                             faceIndices.Add(index);
@@ -118,14 +125,19 @@ namespace ChronoLux.Project
             Mesh mesh = new Mesh();
             mesh.name = string.IsNullOrEmpty(data.name) ? "ImportedMesh" : data.name;
             mesh.indexFormat = data.vertices.Count > 65535 ? UnityEngine.Rendering.IndexFormat.UInt32 : UnityEngine.Rendering.IndexFormat.UInt16;
+            
             mesh.SetVertices(data.vertices);
-            if (data.uvs.Count == data.vertices.Count) mesh.SetUVs(0, data.uvs);
+            mesh.SetTriangles(data.triangles, 0); // Set triangles before recalculating
+            
+            bool hasUVs = data.uvs.Count == data.vertices.Count;
+            if (hasUVs) mesh.SetUVs(0, data.uvs);
+            
             if (data.normals.Count == data.vertices.Count) mesh.SetNormals(data.normals);
             else mesh.RecalculateNormals();
             
-            mesh.SetTriangles(data.triangles, 0);
             mesh.RecalculateBounds();
-            mesh.RecalculateTangents();
+            if (hasUVs) mesh.RecalculateTangents();
+            
             return mesh;
         }
 

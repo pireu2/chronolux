@@ -27,33 +27,88 @@
     margin-left: -12px;
     margin-top: -12px;
     background-image: url('project:/Assets/Textures/crosshair.png');
-    /* Use white tint if texture is dark, or invert if needed */
     -unity-background-image-tint-color: #00E5FF;
-    /* Force visibility if texture is black */
     background-color: transparent;
     pointer-events: none;
 }
 
 /* ── INPUTS ─────────────────────────────────────────────────────────── */
+.unity-base-field {
+    margin: 2px 0;
+    padding: 0;
+    flex-direction: row;
+    align-items: center;
+}
+
 .unity-base-field__label {
-    min-width: 80px;
+    min-width: 50px;
+    max-width: 50px;
     color: var(--text-dim);
-    font-size: 11px;
+    font-size: 10px;
+    margin: 0;
+    padding: 0;
 }
 
-/* DARKEN DROPDOWN / INPUT TEXT FOR VISIBILITY */
 .unity-base-field__input {
-    background-color: #AAAAAA; /* Lighter background */
-    color: #111111;           /* Darker text */
-    -unity-font-style: bold;
-    padding: 3px 6px;
-    border-radius: 3px;
-    border-width: 0;
+    background-color: #1A1A1A;
+    color: var(--text-white);
+    border-width: 1px;
+    border-color: #333;
+    border-radius: 2px;
+    padding: 2px 4px;
+    height: 18px;
+    flex-grow: 1;
 }
 
-.unity-text-field__input {
-    background-color: #AAAAAA;
-    color: #111111;
+/* Specific styling for Toggles */
+.unity-toggle {
+    margin-top: 6px;
+}
+
+.unity-toggle__label {
+    min-width: 120px;
+    max-width: 120px;
+}
+
+.unity-toggle__input {
+    background-color: transparent;
+    border-width: 0;
+    justify-content: flex-end;
+}
+
+.unity-toggle__checkmark {
+    background-color: #1A1A1A;
+    border-width: 1px;
+    border-color: var(--cyan-accent);
+    width: 14px;
+    height: 14px;
+    margin: 0;
+}
+
+/* Specific styling for Sliders */
+.unity-slider {
+    flex-grow: 1;
+}
+
+.unity-slider__label {
+    min-width: 40px;
+    max-width: 40px;
+}
+
+.unity-slider__input {
+    min-height: 14px;
+}
+
+.unity-slider__tracker {
+    background-color: #111;
+    border-color: #333;
+}
+
+.unity-slider__dragger {
+    background-color: var(--cyan-accent);
+    width: 10px;
+    height: 10px;
+    margin-top: -5px;
 }
 
 /* ── ANALYTICS ──────────────────────────────────────────────────────── */
@@ -199,7 +254,7 @@
     background-color: var(--bg-glass);
     border-width: 0;
     margin: 0;
-    padding: 15px;
+    padding: 6px;
     border-right-width: 1px;
     border-right-color: #333;
 }
@@ -214,49 +269,50 @@
 .module-card {
     background-color: rgba(255, 255, 255, 0.03);
     border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 15px;
+    padding: 6px;
+    margin-bottom: 5px;
     border-width: 1px;
     border-color: rgba(255, 255, 255, 0.05);
 }
 
 .module-title {
-    font-size: 10px;
+    font-size: 9px;
     -unity-font-style: bold;
     color: var(--text-dim);
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     letter-spacing: 1px;
 }
 
 /* Hero Data Presentation */
 .value-hero {
-    font-size: 32px;
+    font-size: 26px;
     -unity-font-style: bold;
     color: var(--cyan-accent);
-    margin: 5px 0;
+    margin: 2px 0;
 }
 
 .telemetry-label {
-    font-size: 12px;
+    font-size: 10px;
     color: #888;
 }
 
 /* Material Catalog swatches */
 .bottom-bar {
-    height: 120px;
+    height: 100px;
     background-color: var(--bg-glass);
     border-top-width: 1px;
     border-top-color: var(--cyan-accent);
-    padding: 15px;
+    padding: 5px 15px;
 }
 
 #MaterialCatalog .unity-scroll-view__content-container {
     flex-direction: row;
-    flex-wrap: wrap;
-    padding: 0px 10px;
+    flex-wrap: nowrap;
+    padding: 0px;
 }
 
 #MaterialCatalog .button {
-    margin: 5px;
-    width: 140px;
+    margin: 4px;
+    width: 130px;
+    height: 50px;
 }
