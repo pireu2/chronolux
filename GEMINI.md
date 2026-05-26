@@ -29,11 +29,16 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **Material Library Expansion:** Added scientifically accurate presets and high-quality CC0 textures for Brick, Glass, Mirror, Plaster, Hardwood, Carpet, and Grass.
 - **Enhanced UI UX:** Material catalog automatically displays physical texture maps on selection buttons, and cursor navigation toggles properly via the `ESC` key.
 
-## Immediate Next Steps
+## Immediate Next Steps (Project & Academic Polish)
 
-1. **Runtime OBJ Loader:** Implement a manual or library-based parser to load external `.obj` models selected in the Launcher.
-2. **Data Export:** Support exporting accumulated DoseMaps as `.exr` files and metrology logs as `.csv`.
-3. **Advanced Metrology:** Implement spectral sensitivity curves (e.g., CIE $V(\lambda)$) for wavelength-dependent damage calculation.
+1. **Runtime OBJ/Model Loading:** Implement a robust parser to dynamically load external `.obj` files (the high-fidelity 3D scans from the preservation entity and custom environment rooms).
+2. **Data Export System:** 
+   - Export accumulated DoseMaps as high-dynamic-range `.exr` files.
+   - Export Virtual Lux Sensor telemetry and time-series data to `.csv` for use in the academic paper's graphs.
+3. **Scene Serialization:** Implement a system to save and load specific scenes/setups (artifact position, environment materials, sensor placements) via JSON.
+4. **Scientific Validation Pass:** Conduct a rigorous mathematical review of the Monte Carlo integration, cosine weighting, and Perez model outputs to ensure absolute academic defensibility.
+5. **Advanced Metrology (Optional/Future):** Implement spectral sensitivity curves (e.g., CIE $V(\lambda)$) for wavelength-dependent damage calculation.
+6. **Academic Paper Writing:** Execute the simulations for Scenarios A, B, and C as defined in `paper_outline.md`, generate graphs, and draft the 6-8 page IEEE/ACM format article.
 
 # Project Constraints & Tech Stack
 

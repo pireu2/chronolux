@@ -71,7 +71,10 @@ namespace ChronoLux.Interaction
             if (kb.eKey.isPressed) input += Vector3.up;
             if (kb.qKey.isPressed) input += Vector3.down;
 
-            transform.position += input * speed * Time.deltaTime;
+            float currentSpeed = speed;
+            if (kb.shiftKey.isPressed) currentSpeed *= 10f;
+
+            transform.position += input * currentSpeed * Time.deltaTime;
         }
     }
 }
