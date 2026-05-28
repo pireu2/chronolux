@@ -302,8 +302,17 @@ namespace ChronoLux.Project
 
         public void ClearExistingModels()
         {
-            if (_artifactInstance != null) { Destroy(Application.isPlaying ? (Object)_artifactInstance : _artifactInstance); _artifactInstance = null; }
-            foreach (var env in _environmentInstances) if (env != null) Destroy(Application.isPlaying ? (Object)env : env);
+            if (_artifactInstance != null) { 
+                _artifactInstance.transform.SetParent(null);
+                Destroy(Application.isPlaying ? (Object)_artifactInstance : _artifactInstance); 
+                _artifactInstance = null; 
+            }
+            foreach (var env in _environmentInstances) {
+                if (env != null) {
+                    env.transform.SetParent(null);
+                    Destroy(Application.isPlaying ? (Object)env : env);
+                }
+            }
             _environmentInstances.Clear();
             if (simulator != null) simulator.baker = null;
         }

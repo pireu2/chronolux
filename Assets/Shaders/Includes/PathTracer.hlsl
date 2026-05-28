@@ -51,6 +51,8 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
         
         if (rv < refl)
         {
+            if (isDirectSun) return 0.0; // Shadow rays should be occluded by opaque surfaces, not bounce!
+
             float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
             currentDir = GetCosineWeightedDirection(payload.worldNormal, seed, PI);
             currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;
