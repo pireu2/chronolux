@@ -80,7 +80,7 @@ public class LightDoseSimulator : MonoBehaviour
     [ContextMenu("Run Simulation")]
     public void StartSimulation() {
         if (!ValidateReferences()) return;
-        if (baker.PositionMap == null || baker.PositionMap.width != bakedResolution) baker.Bake(bakedResolution);
+        baker.Bake(bakedResolution);
         irradianceBaker.Initialize(bakedResolution, bakedResolution);
         completedSteps = 0;
         _isSimulating = true;
@@ -109,7 +109,7 @@ public class LightDoseSimulator : MonoBehaviour
     [ContextMenu("Test Static Bake (1 Hour)")]
     public void TestStaticBake() {
         if (!ValidateReferences()) return;
-        if (baker.PositionMap == null || baker.PositionMap.width != bakedResolution) baker.Bake(bakedResolution);
+        baker.Bake(bakedResolution);
         irradianceBaker.Initialize(bakedResolution, bakedResolution);
         ApplySunPosition(new DateTime(year, 6, 21, 12, 0, 0));
         irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, 1.0f, samplesPerPixel, baker.PositionMap, baker.NormalMap);

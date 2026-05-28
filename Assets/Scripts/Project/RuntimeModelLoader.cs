@@ -38,7 +38,9 @@ namespace ChronoLux.Project
             }
 
             // 1. Load Artifact (with migration for legacy projects)
+#pragma warning disable CS0618
             string artifactFile = !string.IsNullOrEmpty(project.artifactFileName) ? project.artifactFileName : project.modelFileName;
+#pragma warning restore CS0618
             
             if (!string.IsNullOrEmpty(artifactFile))
             {
@@ -119,9 +121,58 @@ namespace ChronoLux.Project
                 }
             }
 
+            CreateOutdoorReferenceSensors();
+
             UpdateProgress(1.0f, "Complete!");
             yield return new WaitForSeconds(0.5f);
             if (loadingScreen != null) loadingScreen.style.display = DisplayStyle.None;
+        }
+
+        private void CreateOutdoorReferenceSensors()
+        {
+            // First, destroy any existing dynamically created sensors
+            var existing = new List<VirtualLuxSensor>(VirtualLuxSensor.AllSensors);
+            foreach (var sensor in existing) {
+                if (sensor != null && sensor.gameObject.name.StartsWith("AutoSensor_")) {
+                    Destroy(Application.isPlaying ? (Object)sensor.gameObject : sensor.gameObject);
+                }
+            }
+
+            // Find bounds of the entire scene
+            Bounds bounds = new Bounds(Vector3.zero, Vector3.zero);
+            var renderers = modelRoot.GetComponentsInChildren<Renderer>();
+            if (renderers.Length > 0)
+            {
+                bounds = renderers[0].bounds;
+                foreach (var r in renderers) bounds.Encapsulate(r.bounds);
+            }
+
+            // Place sensors slightly above the highest point of the scene to ensure zero occlusion
+            float spawnY = bounds.max.y + 2.0f;
+            float radius = Mathf.Max(bounds.extents.x, bounds.extents.z) + 1.0f;
+
+            Vector3 center = bounds.center;
+            center.y = spawnY;
+
+            // Create 5 sensors: 1 in center, 4 in a circle around the perimeter
+            Vector3[] positions = new Vector3[] {
+                center,
+                center + new Vector3(radius, 0, 0),
+                center + new Vector3(-radius, 0, 0),
+                center + new Vector3(0, 0, radius),
+                center + new Vector3(0, 0, -radius)
+            };
+
+            for (int i = 0; i < positions.Length; i++)
+            {
+                GameObject sensorObj = new GameObject($"AutoSensor_{i}");
+                sensorObj.transform.SetParent(modelRoot);
+                sensorObj.transform.position = positions[i];
+                sensorObj.transform.rotation = Quaternion.identity; // Point straight UP (transform.up == Vector3.up)
+
+                var luxSensor = sensorObj.AddComponent<VirtualLuxSensor>();
+                luxSensor.showGizmo = true;
+            }
         }
 
         private GameObject CreateGameObjectFromData(SimpleObjLoader.MeshData data, Material customMaterial)

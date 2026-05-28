@@ -52,7 +52,7 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
         if (rv < refl)
         {
             float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
-            currentDir = reflect(currentDir, payload.worldNormal);
+            currentDir = GetCosineWeightedDirection(payload.worldNormal, seed, PI);
             currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;
         }
         else if (rv < refl + trans)

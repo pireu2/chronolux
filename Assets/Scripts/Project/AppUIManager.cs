@@ -455,6 +455,10 @@ namespace ChronoLux.Project
                 if (_saveTimer <= 0) SaveActiveTransform();
             }
 
+            if (UnityEngine.Cursor.lockState == CursorLockMode.Locked && uiDocument != null && uiDocument.rootVisualElement != null) {
+                uiDocument.rootVisualElement.focusController?.focusedElement?.Blur();
+            }
+
             if (simulator == null) return;
             if (_dashboardScreen != null && _dashboardScreen.style.display == DisplayStyle.Flex)
             {
