@@ -102,3 +102,4 @@ InitTestScene*.unity*
 /[Aa]ssets/Models/*
 *.exr
 .vscode/
+*csv

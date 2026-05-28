@@ -246,7 +246,7 @@ public class IrradianceBaker : MonoBehaviour
                 if (req.hasError) return;
                 var data = req.GetData<float>();
                 for (int i = 0; i < snapshot.Length; i++) if (i < data.Length && snapshot[i] != null) 
-                    snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux);
+                    snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux, deltaHours);
             });
         }
     }
