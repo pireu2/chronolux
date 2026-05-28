@@ -11,6 +11,7 @@ public class VirtualLuxSensor : MonoBehaviour
     [ReadOnly, SerializeField] private float simulatedLux;
     [ReadOnly, SerializeField] private float theoreticalLux;
     [ReadOnly, SerializeField, Range(-100, 100)] private float errorPercent;
+    [ReadOnly, SerializeField] private float accumulatedDose;
 
     [Header("Visuals")]
     public bool showGizmo = true;
@@ -19,9 +20,10 @@ public class VirtualLuxSensor : MonoBehaviour
     private void OnEnable() => AllSensors.Add(this);
     private void OnDisable() => AllSensors.Remove(this);
 
-    public void UpdateReadings(float lux, Vector3 sunDir, float beamLux, float diffuseLux)
+    public void UpdateReadings(float lux, Vector3 sunDir, float beamLux, float diffuseLux, float deltaHours = 0f)
     {
         simulatedLux = lux;
+        if (deltaHours > 0f) accumulatedDose += lux * deltaHours;
         float nDotL = Mathf.Max(0, Vector3.Dot(transform.up, sunDir));
         float direct = beamLux * nDotL;
         theoreticalLux = direct + (diffuseLux * 0.5f); 
@@ -34,6 +36,11 @@ public class VirtualLuxSensor : MonoBehaviour
 
     public float currentLux => simulatedLux;
     public float errorPercentage => errorPercent;
+    public float currentDose => accumulatedDose;
+
+    public void ResetDose() {
+        accumulatedDose = 0f;
+    }
 
     private void OnDrawGizmos()
     {

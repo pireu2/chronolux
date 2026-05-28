@@ -48,6 +48,7 @@
                 <ui:VisualElement style="flex-direction: row; align-items: center;">
                     <ui:Label text="2025-06-21 12:00" name="TxtTime" style="margin-right: 25px; font-size: 16px; -unity-font-style: bold;" />
                     <ui:Label text="ALT: 0.0° | AZI: 0.0°" name="TxtSunCoords" style="color: #666; margin-right: 25px; font-size: 13px;" />
+                    <ui:Button text="EXPORT CSV" name="BtnExport" class="button" style="height: 32px; width: 100px; margin-right: 10px; background-color: #552200;" />
                     <ui:Button text="NAVIGATE" name="BtnNav" class="button button-primary" style="height: 32px; width: 100px; margin-right: 10px;" />
                     <ui:Button text="EXIT" name="BtnExit" class="button" style="height: 32px; width: 60px;" />
                 </ui:VisualElement>
@@ -86,6 +87,9 @@
                         <ui:Button text="STOP" name="BtnStop" class="button" />
                         <ui:Button text="CLEAR MAP" name="BtnClear" class="button" />
                         <ui:ProgressBar name="ProgSim" style="margin-top: 15px;" />
+                        
+                        <ui:Label text="DAMAGE HISTORY" style="font-size: 9px; color: #555; margin-top: 10px;" />
+                        <ui:SliderInt label="Day Preview" name="SldHistory" low-value="-1" high-value="0" value="-1" />
                     </ui:VisualElement>
 
                 </ui:VisualElement>

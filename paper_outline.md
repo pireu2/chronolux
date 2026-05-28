@@ -33,6 +33,9 @@
 *   **Environmental Modeling:**
     *   Integration of the Perez Sky Model for accurate solar telemetry (Altitude/Azimuth) and ambient irradiance based on geolocation and time.
     *   Stochastic hemisphere sampling and NEE implementation.
+*   **Statistical Metrology & Data Telemetry:**
+    *   Calculation of spatial dose variance to identify high-contrast material stress zones.
+    *   Implementation of real-time virtual point-probe sensors for localized delta-dose data extraction.
 
 ## 4. Case Studies & Empirical Results (~1.5 - 2 Pages)
 *   *Note: Utilizing high-fidelity 3D scans provided by the heritage preservation partner.*
@@ -45,7 +48,7 @@
     *   Comparative analysis of the peak dose reduction (supported by CSV data graphs).
 *   **Scenario C: Positional Optimization:**
     *   Baseline environment maintained, but artifact repositioned to rely on diffuse interreflection.
-    *   Verification via Virtual Lux Sensors demonstrating adherence to annual conservation limits (e.g., < 50,000 Lux-Hours).
+    *   Verification via localized Virtual Lux Sensors and delta-dose tracking, demonstrating adherence to annual conservation limits (e.g., < 50,000 Lux-Hours) at specific high-risk sample points.
 
 ## 5. Performance & Validation (~0.5 - 1 Page)
 *   **Computational Efficiency:** Benchmarking the GPU-accelerated texture-space approach. Comparing the time taken for a full-year simulation (e.g., 1-hour steps) against traditional offline methods.

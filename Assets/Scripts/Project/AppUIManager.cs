@@ -130,6 +130,14 @@ namespace ChronoLux.Project
             var btnNav = root.Q<Button>("BtnNav");
             if (btnNav != null) btnNav.clicked += StartNavigation;
 
+            var btnExport = root.Q<Button>("BtnExport");
+            if (btnExport != null) btnExport.clicked += () => {
+                if (simulator != null && _loadingScreen != null && _loadingBar != null && _loadingStatus != null) {
+                    _loadingScreen.style.display = DisplayStyle.Flex;
+                    simulator.StartExportCSV(_loadingScreen, _loadingBar, _loadingStatus);
+                }
+            };
+
             var ddRes = root.Q<DropdownField>("DdRes");
             if (ddRes != null) {
                 ddRes.choices = new List<string> { "256", "512", "1024", "2048", "4096" };
@@ -159,6 +167,13 @@ namespace ChronoLux.Project
             if (picker != null) {
                 picker.OnObjectSelected += OnObjectSelected;
                 picker.OnSelectionCleared += OnSelectionCleared;
+            }
+
+            var sldHistory = root.Q<SliderInt>("SldHistory");
+            if (sldHistory != null) {
+                sldHistory.RegisterValueChangedCallback(evt => {
+                    if (simulator != null) simulator.SetPreviewHistoryIndex(evt.newValue);
+                });
             }
 
             ShowLauncher();
@@ -467,6 +482,14 @@ namespace ChronoLux.Project
                 var txtCoords = root.Q<Label>("TxtSunCoords"); if (txtCoords != null) txtCoords.text = $"ALT: {simulator.currentAltitude:F1}° | AZI: {simulator.currentAzimuth:F1}°";
                 var txtMax = root.Q<Label>("TxtMaxDose"); if (txtMax != null) txtMax.text = $"{simulator.maxDoseInScene:F0} Lux·h";
                 var prog = root.Q<ProgressBar>("ProgSim"); if (prog != null) prog.value = simulator.currentProgress;
+
+                var sldHistory = root.Q<SliderInt>("SldHistory");
+                if (sldHistory != null && simulator.historyMaps != null) {
+                    int maxIndex = simulator.historyMaps.Count - 1;
+                    if (sldHistory.highValue != maxIndex) {
+                        sldHistory.highValue = maxIndex;
+                    }
+                }
 
                 UpdateMetrologyAnalytics(root);
             }
