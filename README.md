@@ -11,7 +11,7 @@ Unlike traditional game renderers that prioritize aesthetic screen-space approxi
 
 ---
 
-## 🔬 Scientific Methodology
+##  Scientific Methodology
 
 ### 1. Texture-Space Ray Tracing
 Standard ray tracers shoot rays from a virtual camera to evaluate pixels on a screen. ChronoLux inverts this paradigm. Using DirectX Raytracing (DXR), it launches rays directly from the unwrapped UV coordinates of the 3D artifact (via pre-baked `PositionMap` and `NormalMap` buffers). This ensures that light energy is calculated persistently across the entire surface of the object, regardless of camera occlusion or screen resolution.
@@ -27,7 +27,7 @@ All scene geometry is bound by strict thermodynamic laws. The custom `Simulation
 
 ---
 
-## ⚙️ Core Capabilities
+##  Core Capabilities
 
 - **Time-Stepping Dosimetry:** Accumulates instantaneous illuminance ($E$) in Lux over configurable chronological steps (e.g., hourly intervals across 365 days) into a cumulative dose ($D_{total}$) in Lux-Hours.
 - **Virtual Lux Sensors:** Deployable 3D probes that act as digital light meters. They calculate expected theoretical irradiance ($E = E_{beam} \cdot \cos(\theta) + E_{diffuse} \cdot 0.5$) and validate the Monte Carlo raytracer's output, actively tracking percentage error margins.
@@ -37,7 +37,7 @@ All scene geometry is bound by strict thermodynamic laws. The custom `Simulation
 
 ---
 
-## 💻 System Requirements
+##  System Requirements
 
 Because ChronoLux relies on raw hardware-accelerated ray tracing to calculate millions of paths, it requires modern hardware:
 
@@ -51,7 +51,7 @@ Because ChronoLux relies on raw hardware-accelerated ray tracing to calculate mi
 
 ---
 
-## 📊 Data Output & Metrology
+##  Data Output & Metrology
 
 ChronoLux provides highly granular export mechanisms for external data analysis (e.g., Python, MATLAB, Excel):
 
@@ -60,7 +60,7 @@ ChronoLux provides highly granular export mechanisms for external data analysis 
 
 ---
 
-## 📂 Project Architecture
+##  Project Architecture
 
 *   `/Scripts`: C# simulation orchestration, orbital mechanics (SunCalculator), Async GPU Readback logic, and CSV writing pipelines.
 *   `/Shaders`: HLSL Compute kernels (`IrradianceBaker.compute`) containing the core mathematical ray tracer and BRDF evaluation, plus the visual `HeatmapShader.shader`.
