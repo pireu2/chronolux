@@ -103,3 +103,5 @@ InitTestScene*.unity*
 *.exr
 .vscode/
 *csv
+.repomixignore
+repomix-output.md

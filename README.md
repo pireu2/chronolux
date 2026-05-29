@@ -1,6 +1,6 @@
 # ChronoLux - Heritage Artifact Environmental Damage Simulator
 
-**Status:** Work in Progress (Diploma Project)
+**Status:** Software Complete (Academic Paper Generation Phase)
 
 ## Overview
 
@@ -14,33 +14,38 @@ Unlike traditional game renderers that calculate light for visual aesthetics (Sc
 - **Render Pipeline:** High Definition Render Pipeline (HDRP)
 - **API:** DirectX 12 (DirectX Raytracing - DXR)
 - **Languages:** C# (Simulation Control), HLSL (Compute Shaders)
+- **UI System:** Unity UI Toolkit (UXML/USS)
 
-## Current Scope (WIP)
+## Core Features (Completed)
 
 - **Texture Space Path Tracing:** Custom DXR (DirectX Raytracing) kernels that sample irradiance directly into UV-space textures, bypassing screen-space limitations.
+- **Perez All-Weather Sky Model:** Mathematically validated solar and skylight distribution using cosine-weighted hemisphere sampling.
 - **Material-Aware Simulation:** Physics-driven `SimulationMaterial` component for assigning real-world reflectance and transmittance values to scene geometry.
 - **Energy Conservation:** Mathematical clamping and normalization of light transport (Reflectance + Transmittance ≤ 1.0) to ensure thermodynamic validity.
 - **Deterministic RTAS Sorting:** Custom renderer sorting logic to ensure stable InstanceID-to-Material mapping across different hardware and sessions.
-- **Progressive Light Accumulation:** C# simulation loop that steps through time (Sunrise to Sunset), accumulating light samples to prevent GPU timeouts.
+- **Virtual Lux Sensors:** Real-time metrology probes that provide analytical variance and percentage error against theoretical mathematical baselines.
+- **Headless Data Export:** Decoupled background Coroutine that safely generates massive multi-column CSVs of simulation telemetry (AvgDose, MaxDose, Variance) without halting the editor.
 - **Lux-to-Dose Conversion:** Translates instantaneous light energy ($E$) into total cumulative dose ($D_{total}$) in Lux Hours.
 - **Heatmap Visualization:** 2-pass HDRP shader mapping accumulated exposure data to a Purple-Red-Yellow gradient based on CIE 157:2004 conservation thresholds.
-
+- **Persistent Project Management:** Serialization of artifact transformations, material assignments, and simulation settings directly to JSON.
 
 ## Requirements
 
 - **OS:** Windows 10/11 (Required for DX12)
 - **GPU:** NVIDIA RTX series (or DXR-compatible GPU) capable of hardware-accelerated ray tracing.
-- **Unity Setup:** \* HDRP package installed.
+- **Unity Setup:** 
+  - HDRP package installed.
   - Graphics API set to `Direct3D12 (Experimental)`.
   - Static Batching disabled.
   - Realtime Ray Tracing explicitly enabled in the HDRP Asset.
 
 ## Project Structure
 
-- `/Scripts`: C# controllers for the simulation loop, time management, and texture baking.
+- `/Scripts`: C# controllers for the simulation loop, time management, UI, and texture baking.
 - `/Shaders`: HLSL Compute Shaders for the path tracer and the surface shader for the heatmap visualization.
+- `/UI`: UXML and USS files that comprise the modern dashboard and material catalog.
 - `/Models`: 3D test meshes (ensure meshes have non-overlapping UVs and Read/Write enabled).
 
 ---
 
-_Note: This is an active academic project and is currently focused strictly on the core physics simulation and data accumulation engine._
+_Note: The software engineering phase of this academic project is complete. The current focus is running Scenarios A, B, and C to extract data for the resulting CS Diploma thesis paper._

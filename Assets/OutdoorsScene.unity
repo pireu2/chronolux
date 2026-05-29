@@ -398,6 +398,8 @@ MonoBehaviour:
   stepSeconds: 1800
   samplesPerPixel: 64
   bakedResolution: 1024
+  exportResolution: 256
+  coverageThreshold: 5
   sunLight: {fileID: 157207113}
   baker: {fileID: 0}
   irradianceBaker: {fileID: 183423943}
@@ -409,6 +411,13 @@ MonoBehaviour:
   completedSteps: 0
   currentAltitude: 0
   currentAzimuth: 0
+  minDoseInScene: 0
+  averageDoseInScene: 0
+  doseVarianceInScene: 0
+  deltaMaxDose: 0
+  deltaAvgDose: 0
+  historyMaps: []
+  previewHistoryIndex: -1
 --- !u!4 &183423942
 Transform:
   m_ObjectHideFlags: 0
@@ -878,55 +887,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::ChronoLux.Interaction.FreeLookCamera
   sensitivity: 0.1
   speed: 5
---- !u!1 &1913383145
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1913383147}
-  - component: {fileID: 1913383146}
-  m_Layer: 0
-  m_Name: Sensor
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!114 &1913383146
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1913383145}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 4042cbcca082a3549ab693b01e50c95b, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::VirtualLuxSensor
-  simulatedLux: 0
-  theoreticalLux: 0
-  errorPercent: 0
-  showGizmo: 1
-  gizmoColor: {r: 0, g: 1, b: 1, a: 1}
---- !u!4 &1913383147
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1913383145}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.488, y: -0, z: -0.32901}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1920371087
 GameObject:
   m_ObjectHideFlags: 0
@@ -1064,7 +1024,6 @@ SceneRoots:
   - {fileID: 157207114}
   - {fileID: 432432461}
   - {fileID: 2013410475}
-  - {fileID: 1913383147}
   - {fileID: 611708664}
   - {fileID: 1920371090}
   - {fileID: 926951328}

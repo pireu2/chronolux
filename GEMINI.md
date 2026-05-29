@@ -6,7 +6,7 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 
 # Current System State (Handoff - May 2026)
 
-## Completed Features
+## Completed Features (May 2026)
 
 - **Modern UI Toolkit Dashboard:** Replaced legacy UI with a professional UXML/USS system.
 - **Project Launcher:** Multi-project management system with JSON persistence for simulation parameters.
@@ -19,7 +19,6 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **UV Space Baker:** Fixed Z-clipping (Z=0.5) and Y-axis inversion for HDRP/DX12 RenderTextures.
 - **Monte Carlo Path Tracer:** Implemented a stochastic RayGen kernel with Next Event Estimation (NEE) for unified direct and indirect light calculation.
 - **Perez Sky Model:** Integrated the Perez All-Weather Model (T=2.0) for scientifically accurate ambient skylight distribution.
-- **Digital Light Sensors:** Implemented real-time virtual Lux meters with point-probe RayGen and theoretical validation for metrology verification.
 - **Hemisphere Sampling:** Cosine-weighted importance sampling for accurate ambient skylight and diffuse interreflection.
 - **Geometric Normal Pipeline:** C# geometry scraper and GPU-side normal reconstruction from vertex/index buffers to support accurate specular reflections.
 - **Material-Aware Dosimetry:** Added `SimulationMaterial` component and `_SimulationMaterials` GPU buffer to handle reflectance and transmittance.
@@ -33,15 +32,15 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **Persistent Scene Setup:** Full serialization of artifact transformations (Position, Scale) and granular material assignments per sub-mesh, saved automatically to the project's JSON.
 - **Navigation Speed Boost:** Implemented a 10x velocity multiplier when holding the Shift key for efficient architectural exploration.
 - **Asynchronous Loading UX:** Added a non-blocking "LOADING ASSETS" overlay with a real-time progress bar and status updates.
+- **Headless Metrology Export:** Fully asynchronous background CSV generation with decoupled mathematics tracking DeltaAvgDose, MaxDose, DoseVariance, Coverage, and precise Virtual Lux Sensor error margins.
+- **EXR Snapshotting:** Automated saving of daily high dynamic range heatmaps for external data visualization.
 
-## Immediate Next Steps (Project & Academic Polish)
+## Current Focus (Academic Polish)
 
-1. **Data Export System:** 
-   - Export accumulated DoseMaps as high-dynamic-range `.exr` files.
-   - Export Virtual Lux Sensor telemetry and time-series data to `.csv` for use in the academic paper's graphs.
-2. **Scientific Validation Pass:** Conduct a rigorous mathematical review of the Monte Carlo integration, cosine weighting, and Perez model outputs to ensure absolute academic defensibility.
-3. **Advanced Metrology (Optional/Future):** Implement spectral sensitivity curves (e.g., CIE $V(\lambda)$) for wavelength-dependent damage calculation.
-4. **Academic Paper Writing:** Execute the simulations for Scenarios A, B, and C as defined in `paper_outline.md`, generate graphs, and draft the 6-8 page IEEE/ACM format article.
+The software engineering and physics phases are officially COMPLETE. The tool has been scientifically validated.
+The singular focus is now utilizing the engine to draft the CS Diploma thesis.
+
+1. **Academic Paper Writing:** Execute the simulations for Scenarios A, B, and C as defined in `paper_outline.md`, generate graphs using the exported `.csv` data, and finalize the IEEE/ACM format article.
 
 # Project Constraints & Tech Stack
 
