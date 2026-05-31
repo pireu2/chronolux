@@ -105,3 +105,5 @@ InitTestScene*.unity*
 *csv
 .repomixignore
 repomix-output.md
+
+!/DataProcessing/scenario_*.csv
