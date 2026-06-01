@@ -71,10 +71,6 @@ ChronoLux provides highly granular export mechanisms for external data analysis 
 
 ---
 
-> **Academic Note:** The software engineering phase of this CS Diploma project is complete. Current usage is focused on executing experimental scenarios to extract empirical data for the resulting academic paper.
-
----
-
 ## Citation
 
 If you use ChronoLux in your research, please cite our paper:
