@@ -7,6 +7,8 @@
 
 **ChronoLux** is a scientifically rigorous metrology and visualization tool designed for the preventive conservation of cultural heritage artifacts. Built as a CS Diploma Project, it functions as a "Digital Twin," simulating long-term solar radiation exposure and calculating cumulative environmental light damage (measured in **Lux-Hours**) on 3D artifacts.
 
+**Read the full academic thesis:** [ChronoLux Thesis (PDF)](Paper/paper.pdf)
+
 Unlike traditional game renderers that prioritize aesthetic screen-space approximations, ChronoLux employs a custom **Texture-Space Monte Carlo Path Tracer** to mathematically simulate thermodynamic light transport directly onto an artifact's surface over extended temporal ranges.
 
 ---
@@ -70,3 +72,18 @@ ChronoLux provides highly granular export mechanisms for external data analysis 
 ---
 
 > **Academic Note:** The software engineering phase of this CS Diploma project is complete. Current usage is focused on executing experimental scenarios to extract empirical data for the resulting academic paper.
+
+---
+
+## Citation
+
+If you use ChronoLux in your research, please cite our paper:
+
+```bibtex
+@article{chronolux2026,
+  title={ChronoLux: Texture-Space Ray Tracing for Interactive Light Dosimetry in Preventive Conservation},
+  author={Duică Sebastian},
+  journal={CS Diploma Thesis, Technical University of Cluj-Napoca},
+  year={2026}
+}
+```
