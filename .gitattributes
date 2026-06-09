@@ -1,2 +1,3 @@
 *.tex linguist-detectable=false
+*.ipynb linguist-detectable=false
 Paper/* linguist-vendored

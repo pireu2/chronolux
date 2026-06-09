@@ -209,12 +209,18 @@ These results illustrate the usefulness of our Digital Twin for simulating and v
 Changing the location of the asset in Scenarios C and D is necessary to explore the effects of geometric occlusion and represents the strict mathematical stress test for the NEE functionality.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig5_beam_vs_diffuse.png}}
-\caption{Decomposition of light dosimetry shows effective separation of direct solar beam from diffuse Perez ambient skylight using our Next Event Estimation algorithm.}
-\label{fig:beam_diffuse}
+\centerline{\includegraphics[width=0.9\columnwidth]{fig5a_beam_vs_diffuse.png}}
+\caption{Decomposition of light dosimetry in Scenario A shows effective separation of direct solar beam from diffuse Perez ambient skylight using our Next Event Estimation algorithm, with direct beam dominating the exposure.}
+\label{fig:beam_diffuse_a}
 \end{figure}
 
-As shown in Figure~\ref{fig:beam_diffuse}, our engine is able to distinguish between direct beam irradiance and diffuse ambient skylight. This confirms that our geometric occlusion successfully filters out the direct beam stress and leaves the asset exposed only to Perez diffuse skylight.
+\begin{figure}[htbp]
+\centerline{\includegraphics[width=0.9\columnwidth]{fig5b_beam_vs_diffuse_scenario_d.png}}
+\caption{Decomposition of light dosimetry in Scenario D reveals a significantly larger diffuse/indirect composition compared to Scenario A, validating the impact of geometric occlusion.}
+\label{fig:beam_diffuse_d}
+\end{figure}
+
+As shown in Figure~\ref{fig:beam_diffuse_a} and Figure~\ref{fig:beam_diffuse_d}, our engine is able to distinguish between direct beam irradiance and diffuse ambient skylight. This confirms that our geometric occlusion successfully filters out the direct beam stress and leaves the asset exposed predominantly to Perez diffuse skylight.
 
 \section{Performance \& Validation}
 
