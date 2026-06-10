@@ -20,6 +20,8 @@ uint _FrameIndex;
 uint _SamplesPerPixel;
 
 RWTexture2D<float> _DoseMap;
+RWTexture2D<float> _DirectDoseMap;
+RWTexture2D<float> _IndirectDoseMap;
 RaytracingAccelerationStructure _SceneRTAS;
 
 // Material and Geometry Buffers
@@ -41,17 +43,18 @@ void IrradianceBakeRayGen()
     
     float3 origin = bakedPos.xyz;
     float3 normal = normalize(bakedNormal.xyz);
-    float3 biasedOrigin = origin + normal * 0.02; // Standard launch bias
     
     uint baseSeed = Hash(id.y * dims.x + id.x + _FrameIndex);
     float totalIrradiance = 0.0;
     float nDotSun = dot(normal, _SunDirection);
 
     // 1. Direct Sun
+    float directIrradiance = 0.0;
     if (nDotSun > 0.0)
     {
         uint sunSeed = baseSeed;
-        totalIrradiance += TracePath(biasedOrigin, _SunDirection, normal, sunSeed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
+        directIrradiance = TracePath(origin, _SunDirection, normal, sunSeed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
+        totalIrradiance += directIrradiance;
     }
 
     // 2. Stochastic Multi-Sampling
@@ -61,12 +64,15 @@ void IrradianceBakeRayGen()
     {
         uint sampleSeed = Hash(baseSeed + i);
         float3 randomDir = GetCosineWeightedDirection(normal, sampleSeed, PI);
-        indirectIrradiance += TracePath(biasedOrigin, randomDir, normal, sampleSeed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux);
+        indirectIrradiance += TracePath(origin, randomDir, normal, sampleSeed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux);
     }
     
-    totalIrradiance += (indirectIrradiance / (float)numSamples) * PI;
+    float avgIndirect = (indirectIrradiance / (float)numSamples) * PI;
+    totalIrradiance += avgIndirect;
 
     _DoseMap[id] += (totalIrradiance * _DeltaHours);
+    _DirectDoseMap[id] += (directIrradiance * _DeltaHours);
+    _IndirectDoseMap[id] += (avgIndirect * _DeltaHours);
 }
 
 [shader("miss")]

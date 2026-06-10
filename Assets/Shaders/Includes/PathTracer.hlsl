@@ -37,11 +37,25 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
         payload.hitDistance = 0.0;
         payload.worldNormal = float3(0, 1, 0);
 
-        TraceRay(rtas, RAY_FLAG_FORCE_OPAQUE, 0xFF, 0, 1, 0, ray, payload);
+        uint rayFlags = RAY_FLAG_FORCE_OPAQUE;
+        if (isDirectSun) rayFlags |= RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
+        
+        TraceRay(rtas, rayFlags, 0xFF, 0, 1, 0, ray, payload);
 
         if (payload.isOccluded == 0)
         {
             return EvaluateSky(currentDir, sunDir, beamLux, diffuseLux, isDirectSun) * throughput;
+        }
+
+        if (isDirectSun)
+        {
+            float trans = saturate(payload.transmittance);
+            if (trans <= 0.0) return 0.0; // Blocked by opaque geometry
+            
+            throughput *= trans;
+            // Use a larger bias to guarantee escaping the pane geometry, especially at grazing angles
+            currentOrigin += currentDir * (payload.hitDistance + RAY_BIAS * 5.0);
+            continue;
         }
 
         // Probabilistic event selection (Russian Roulette)
@@ -51,8 +65,6 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
         
         if (rv < refl)
         {
-            if (isDirectSun) return 0.0; // Shadow rays should be occluded by opaque surfaces, not bounce!
-
             float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
             currentDir = GetCosineWeightedDirection(payload.worldNormal, seed, PI);
             currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;

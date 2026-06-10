@@ -26,6 +26,8 @@ using System.IO;
         public float expectedSurfaceArea;
         public List<SensorDataSnapshot> sensors;
         public float[] doseMapData;
+        public float[] directDoseMapData;
+        public float[] indirectDoseMapData;
     }
 
 [ExecuteAlways]
@@ -82,6 +84,8 @@ public class LightDoseSimulator : MonoBehaviour
     private IEnumerator _simulationEnumerator;
     private MaterialPropertyBlock _propBlock;
     private RenderTexture _downsampleRT;
+    private RenderTexture _directDownsampleRT;
+    private RenderTexture _indirectDownsampleRT;
     private Texture2D _readbackTex;
     private List<HourlySnapshot> _snapshotList = new List<HourlySnapshot>();
 
@@ -104,6 +108,8 @@ public class LightDoseSimulator : MonoBehaviour
 
     private void CleanDownsampleResources() {
         if (_downsampleRT != null) { _downsampleRT.Release(); _downsampleRT = null; }
+        if (_directDownsampleRT != null) { _directDownsampleRT.Release(); _directDownsampleRT = null; }
+        if (_indirectDownsampleRT != null) { _indirectDownsampleRT.Release(); _indirectDownsampleRT = null; }
         if (_readbackTex != null) { 
             if (Application.isPlaying) Destroy(_readbackTex);
             else DestroyImmediate(_readbackTex);
@@ -263,10 +269,18 @@ public class LightDoseSimulator : MonoBehaviour
         int res = exportResolution;
         if (_downsampleRT == null || _downsampleRT.width != res) {
             if (_downsampleRT != null) _downsampleRT.Release();
+            if (_directDownsampleRT != null) _directDownsampleRT.Release();
+            if (_indirectDownsampleRT != null) _indirectDownsampleRT.Release();
             _downsampleRT = new RenderTexture(res, res, 0, RenderTextureFormat.RFloat);
             _downsampleRT.Create();
+            _directDownsampleRT = new RenderTexture(res, res, 0, RenderTextureFormat.RFloat);
+            _directDownsampleRT.Create();
+            _indirectDownsampleRT = new RenderTexture(res, res, 0, RenderTextureFormat.RFloat);
+            _indirectDownsampleRT.Create();
         }
         Graphics.Blit(irradianceBaker.DoseMap, _downsampleRT);
+        Graphics.Blit(irradianceBaker.DirectDoseMap, _directDownsampleRT);
+        Graphics.Blit(irradianceBaker.IndirectDoseMap, _indirectDownsampleRT);
         
         float expectedArea = baker.SurfacePixelCount * ((float)res / bakedResolution) * ((float)res / bakedResolution);
         
@@ -275,32 +289,52 @@ public class LightDoseSimulator : MonoBehaviour
             sensorsSnap.Add(new SensorDataSnapshot { lux = s.currentLux, dose = s.currentDose, errorPct = s.errorPercentage });
         }
 
-        AsyncGPUReadback.Request(_downsampleRT, 0, TextureFormat.RFloat, (req) => {
-            if (req.hasError) return;
-            var data = req.GetData<float>();
-            float[] mapData = data.ToArray();
-            
-            _snapshotList.Add(new HourlySnapshot {
-                day = day, timeStr = timeStr, altitude = alt, azimuth = azi,
-                beamLux = beam, diffuseLux = diff, sensors = sensorsSnap,
-                doseMapData = mapData, expectedSurfaceArea = expectedArea
-            });
-            
-            // Update UI variables occasionally so dashboard is responsive
-            float maxVal = 0f; float minVal = float.MaxValue; double sumVal = 0.0; int hitCount = 0; int coverageHits = 0;
-            for (int i = 0; i < mapData.Length; i++) {
-                float val = mapData[i];
-                if (val > 1e-4f) {
-                    if (val > maxVal) maxVal = val;
-                    if (val < minVal) minVal = val;
-                    sumVal += val; hitCount++;
+        float[] mapData = null;
+        float[] directMapData = null;
+        float[] indirectMapData = null;
+        int completed = 0;
+
+        System.Action checkDone = () => {
+            completed++;
+            if (completed == 3) {
+                if (mapData == null || directMapData == null || indirectMapData == null) return;
+                
+                _snapshotList.Add(new HourlySnapshot {
+                    day = day, timeStr = timeStr, altitude = alt, azimuth = azi,
+                    beamLux = beam, diffuseLux = diff, sensors = sensorsSnap,
+                    doseMapData = mapData, directDoseMapData = directMapData, indirectDoseMapData = indirectMapData,
+                    expectedSurfaceArea = expectedArea
+                });
+                
+                // Update UI variables occasionally so dashboard is responsive
+                float maxVal = 0f; float minVal = float.MaxValue; double sumVal = 0.0; int hitCount = 0; int coverageHits = 0;
+                for (int i = 0; i < mapData.Length; i++) {
+                    float val = mapData[i];
+                    if (val > 1e-4f) {
+                        if (val > maxVal) maxVal = val;
+                        if (val < minVal) minVal = val;
+                        sumVal += val; hitCount++;
+                    }
+                    if (val > coverageThreshold) coverageHits++;
                 }
-                if (val > coverageThreshold) coverageHits++;
+                if (hitCount == 0) minVal = 0;
+                maxDoseInScene = maxVal;
+                averageDoseInScene = hitCount > 0 ? (float)(sumVal / expectedArea) : 0f;
+                surfaceCoverage = Mathf.Clamp(((float)coverageHits / expectedArea) * 100f, 0f, 100f);
             }
-            if (hitCount == 0) minVal = 0;
-            maxDoseInScene = maxVal;
-            averageDoseInScene = hitCount > 0 ? (float)(sumVal / expectedArea) : 0f;
-            surfaceCoverage = Mathf.Clamp(((float)coverageHits / expectedArea) * 100f, 0f, 100f);
+        };
+
+        AsyncGPUReadback.Request(_downsampleRT, 0, TextureFormat.RFloat, (req) => {
+            if (!req.hasError) mapData = req.GetData<float>().ToArray();
+            checkDone();
+        });
+        AsyncGPUReadback.Request(_directDownsampleRT, 0, TextureFormat.RFloat, (reqDir) => {
+            if (!reqDir.hasError) directMapData = reqDir.GetData<float>().ToArray();
+            checkDone();
+        });
+        AsyncGPUReadback.Request(_indirectDownsampleRT, 0, TextureFormat.RFloat, (reqIndir) => {
+            if (!reqIndir.hasError) indirectMapData = reqIndir.GetData<float>().ToArray();
+            checkDone();
         });
     }
 
@@ -320,9 +354,11 @@ public class LightDoseSimulator : MonoBehaviour
 
         int total = _snapshotList.Count;
         float[] prevMapData = null;
+        float[] prevDirectMapData = null;
+        float[] prevIndirectMapData = null;
 
         using (StreamWriter writer = new StreamWriter(csvPath)) {
-            writer.WriteLine($"Day,Time,Altitude,Azimuth,BeamLux,DiffuseLux,DeltaMaxDose,DeltaAvgDose,MaxDose,AvgDose,MinDose,DoseVariance,Coverage,AvgSensorLux,AvgSensorDose,AvgSensorErrorPct");
+            writer.WriteLine($"Day,Time,Altitude,Azimuth,BeamLux,DiffuseLux,DeltaMaxDose,DeltaAvgDose,MaxDose,AvgDose,MinDose,DoseVariance,Coverage,AvgSensorLux,AvgSensorDose,AvgSensorErrorPct,DeltaAvgDirectDose,DeltaAvgIndirectDose,DeltaMaxDirectDose,DeltaMaxIndirectDose,DirectCoverage");
 
             for (int i = 0; i < total; i++) {
                 var snap = _snapshotList[i];
@@ -334,16 +370,30 @@ public class LightDoseSimulator : MonoBehaviour
 
                 float maxCumulative = 0f; float minCumulative = float.MaxValue; double sumCumulative = 0.0; 
                 float maxDelta = 0f; float minDelta = float.MaxValue; double sumDelta = 0.0; double sumSqrDelta = 0.0;
+                double sumDirectDelta = 0.0; double sumIndirectDelta = 0.0;
                 int activePixels = 0; int coverageHits = 0;
+                
+                float maxDirectDelta = 0f; float maxIndirectDelta = 0f;
+                int directCoverageHits = 0;
                 
                 for (int p = 0; p < snap.doseMapData.Length; p++) {
                     float currentVal = snap.doseMapData[p];
+                    float currentDirectVal = snap.directDoseMapData[p];
+                    float currentIndirectVal = snap.indirectDoseMapData[p];
                     if (currentVal > 1e-5f) activePixels++;
                     if (currentVal > coverageThreshold) coverageHits++;
                     
                     float prevVal = prevMapData != null ? prevMapData[p] : 0f;
                     float deltaVal = currentVal - prevVal;
                     if (deltaVal < 0f) deltaVal = 0f;
+
+                    float prevDirectVal = prevDirectMapData != null ? prevDirectMapData[p] : 0f;
+                    float deltaDirectVal = currentDirectVal - prevDirectVal;
+                    if (deltaDirectVal < 0f) deltaDirectVal = 0f;
+
+                    float prevIndirectVal = prevIndirectMapData != null ? prevIndirectMapData[p] : 0f;
+                    float deltaIndirectVal = currentIndirectVal - prevIndirectVal;
+                    if (deltaIndirectVal < 0f) deltaIndirectVal = 0f;
 
                     if (currentVal > maxCumulative) maxCumulative = currentVal;
                     if (currentVal > 1e-4f && currentVal < minCumulative) minCumulative = currentVal;
@@ -352,8 +402,16 @@ public class LightDoseSimulator : MonoBehaviour
                     if (deltaVal > maxDelta) maxDelta = deltaVal;
                     if (currentVal > 1e-4f && deltaVal < minDelta) minDelta = deltaVal;
                     
+                    if (deltaDirectVal > maxDirectDelta) maxDirectDelta = deltaDirectVal;
+                    if (deltaIndirectVal > maxIndirectDelta) maxIndirectDelta = deltaIndirectVal;
+                    
+                    // Count pixels that receive a meaningful amount of direct sunlight (> 5 Lux)
+                    if (deltaDirectVal > 5.0f) directCoverageHits++;
+                    
                     sumDelta += deltaVal;
                     sumSqrDelta += (double)deltaVal * deltaVal;
+                    sumDirectDelta += deltaDirectVal;
+                    sumIndirectDelta += deltaIndirectVal;
                 }
                 if (activePixels == 0) minCumulative = 0;
                 if (minDelta == float.MaxValue) minDelta = 0;
@@ -363,6 +421,8 @@ public class LightDoseSimulator : MonoBehaviour
 
                 float avgCumulative = (float)(sumCumulative / expectedArea);
                 float avgDelta = (float)(sumDelta / expectedArea);
+                float avgDirectDelta = (float)(sumDirectDelta / expectedArea);
+                float avgIndirectDelta = (float)(sumIndirectDelta / expectedArea);
                 
                 float hourlyVariance = 0f;
                 if (activePixels > 1) {
@@ -372,8 +432,11 @@ public class LightDoseSimulator : MonoBehaviour
                 }
                 
                 float coverage = Mathf.Clamp(((float)coverageHits / expectedArea) * 100f, 0f, 100f);
+                float directCoverage = Mathf.Clamp(((float)directCoverageHits / expectedArea) * 100f, 0f, 100f);
 
                 prevMapData = snap.doseMapData;
+                prevDirectMapData = snap.directDoseMapData;
+                prevIndirectMapData = snap.indirectDoseMapData;
 
                 float avgLux = 0f, avgDose = 0f, avgError = 0f;
                 if (snap.sensors.Count > 0) {
@@ -387,7 +450,7 @@ public class LightDoseSimulator : MonoBehaviour
                     avgError /= snap.sensors.Count;
                 }
 
-                writer.WriteLine($"{snap.day},{snap.timeStr},{snap.altitude},{snap.azimuth},{snap.beamLux},{snap.diffuseLux},{maxDelta},{avgDelta},{maxCumulative},{avgCumulative},{minCumulative},{hourlyVariance},{coverage},{avgLux},{avgDose},{avgError}");
+                writer.WriteLine($"{snap.day},{snap.timeStr},{snap.altitude},{snap.azimuth},{snap.beamLux},{snap.diffuseLux},{maxDelta},{avgDelta},{maxCumulative},{avgCumulative},{minCumulative},{hourlyVariance},{coverage},{avgLux},{avgDose},{avgError},{avgDirectDelta},{avgIndirectDelta},{maxDirectDelta},{maxIndirectDelta},{directCoverage}");
             }
         }
 

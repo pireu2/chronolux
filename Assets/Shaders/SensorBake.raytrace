@@ -22,7 +22,6 @@ uint _FrameIndex;
 uint _MaterialCount;
 uint _SamplesPerPixel;
 
-// OUTPUT
 RWStructuredBuffer<float> _SensorOutputs;
 
 // SHARED BUFFERS

@@ -33,6 +33,8 @@ public class IrradianceBaker : MonoBehaviour
     [Range(0f, 1f)] public float defaultTransmittance = 0.0f;
 
     private RenderTexture _doseMap;
+    private RenderTexture _directDoseMap;
+    private RenderTexture _indirectDoseMap;
     private RayTracingAccelerationStructure _rtas;
     private ComputeBuffer _simulationMaterialBuffer;
     private ComputeBuffer _vertexBuffer;
@@ -50,6 +52,8 @@ public class IrradianceBaker : MonoBehaviour
     private static readonly int _ID_PositionMap = Shader.PropertyToID("_PositionMap");
     private static readonly int _ID_NormalMap = Shader.PropertyToID("_NormalMap");
     private static readonly int _ID_DoseMap = Shader.PropertyToID("_DoseMap");
+    private static readonly int _ID_DirectDoseMap = Shader.PropertyToID("_DirectDoseMap");
+    private static readonly int _ID_IndirectDoseMap = Shader.PropertyToID("_IndirectDoseMap");
     private static readonly int _ID_SceneRTAS = Shader.PropertyToID("_SceneRTAS");
     private static readonly int _ID_SunDirection = Shader.PropertyToID("_SunDirection");
     private static readonly int _ID_BeamLux = Shader.PropertyToID("_BeamLux");
@@ -66,6 +70,8 @@ public class IrradianceBaker : MonoBehaviour
     private static readonly int _ID_SensorOutputs = Shader.PropertyToID("_SensorOutputs");
 
     public RenderTexture DoseMap => _doseMap;
+    public RenderTexture DirectDoseMap => _directDoseMap;
+    public RenderTexture IndirectDoseMap => _indirectDoseMap;
 
     private void OnValidate() => ClampEnergy(ref defaultReflectance, ref defaultTransmittance);
     private static void ClampEnergy(ref float r, ref float t) { r = Mathf.Clamp01(r); t = Mathf.Clamp01(t); float s = r + t; if (s > 1f) { r /= s; t /= s; } }
@@ -151,9 +157,15 @@ public class IrradianceBaker : MonoBehaviour
 
         _doseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "DoseMap" };
         _doseMap.Create();
+        _directDoseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "DirectDoseMap" };
+        _directDoseMap.Create();
+        _indirectDoseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "IndirectDoseMap" };
+        _indirectDoseMap.Create();
 
         var cmd = new CommandBuffer { name = "Clear DoseMap" };
         cmd.SetRenderTarget(_doseMap); cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_directDoseMap); cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_indirectDoseMap); cmd.ClearRenderTarget(true, true, Color.clear);
         Graphics.ExecuteCommandBuffer(cmd); cmd.Release();
 
         _isInitialized = true;
@@ -166,6 +178,10 @@ public class IrradianceBaker : MonoBehaviour
         if (_doseMap == null) return;
         var cmd = new CommandBuffer { name = "Reset DoseMap" };
         cmd.SetRenderTarget(_doseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_directDoseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_indirectDoseMap);
         cmd.ClearRenderTarget(true, true, Color.clear);
         Graphics.ExecuteCommandBuffer(cmd);
         cmd.Release();
@@ -227,6 +243,8 @@ public class IrradianceBaker : MonoBehaviour
         cmd.SetRayTracingTextureParam(rayTracingShader, _ID_PositionMap, positionMap);
         cmd.SetRayTracingTextureParam(rayTracingShader, _ID_NormalMap, normalMap);
         cmd.SetRayTracingTextureParam(rayTracingShader, _ID_DoseMap, _doseMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_DirectDoseMap, _directDoseMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_IndirectDoseMap, _indirectDoseMap);
         cmd.SetRayTracingFloatParam(rayTracingShader, _ID_DeltaHours, deltaHours);
         cmd.DispatchRays(rayTracingShader, "IrradianceBakeRayGen", (uint)_doseMap.width, (uint)_doseMap.height, 1, cam);
 
@@ -245,8 +263,11 @@ public class IrradianceBaker : MonoBehaviour
             AsyncGPUReadback.Request(_sensorOutputBuffer, (req) => {
                 if (req.hasError) return;
                 var data = req.GetData<float>();
-                for (int i = 0; i < snapshot.Length; i++) if (i < data.Length && snapshot[i] != null) 
-                    snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux, deltaHours);
+                for (int i = 0; i < snapshot.Length; i++) {
+                    if (i < data.Length && snapshot[i] != null) {
+                        snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux, deltaHours);
+                    }
+                }
             });
         }
     }
@@ -255,7 +276,8 @@ public class IrradianceBaker : MonoBehaviour
         if (_rtas != null) { _rtas.Release(); _rtas = null; }
         void Rel(ref ComputeBuffer b) { if (b != null) { b.Release(); b = null; } }
         Rel(ref _simulationMaterialBuffer); Rel(ref _vertexBuffer); Rel(ref _indexBuffer); Rel(ref _metadataBuffer); Rel(ref _sensorInputBuffer); Rel(ref _sensorOutputBuffer);
-        if (_doseMap != null) { _doseMap.Release(); if (Application.isPlaying) Destroy(_doseMap); else DestroyImmediate(_doseMap); _doseMap = null; }
+        void RelRT(ref RenderTexture rt) { if (rt != null) { rt.Release(); if (Application.isPlaying) Destroy(rt); else DestroyImmediate(rt); rt = null; } }
+        RelRT(ref _doseMap); RelRT(ref _directDoseMap); RelRT(ref _indirectDoseMap);
     }
     private void OnDestroy() => CleanUp();
 }

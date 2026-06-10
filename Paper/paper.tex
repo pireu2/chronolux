@@ -5,6 +5,7 @@
 \usepackage{amsmath,amssymb,amsfonts}
 \usepackage{algorithmic}
 \usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage{textcomp}
 \usepackage{xcolor}
 \usepackage{listings}
@@ -34,31 +35,31 @@
 \title{Real-Time Light Dosimetry for Heritage Digital Twins via Texture Space Ray Tracing}
 
 \author{\IEEEauthorblockN{Sebastian Duică}
-\IEEEauthorblockA{\textit{Computer Science Department} \\
-\textit{Technical University of Cluj-Napoca}\\ 
-Cluj-Napoca, Romania \\
-Duica.Ro.Sebastian@student.utcluj.ro} \\
-% \and
-% \IEEEauthorblockN{Advisor Name}
-% \IEEEauthorblockA{\textit{Computer Science Department} \\
-% \textit{Technical University of Cluj-Napoca}\\
-% Cluj-Napoca, Romania \\
-% advisor.email@example.com}
+    \IEEEauthorblockA{\textit{Computer Science Department} \\
+        \textit{Technical University of Cluj-Napoca}\\
+        Cluj-Napoca, Romania \\
+        Duica.Ro.Sebastian@student.utcluj.ro} \\
+    % \and
+    % \IEEEauthorblockN{Advisor Name}
+    % \IEEEauthorblockA{\textit{Computer Science Department} \\
+    % \textit{Technical University of Cluj-Napoca}\\
+    % Cluj-Napoca, Romania \\
+    % advisor.email@example.com}
 }
 
 \maketitle
 
 \begin{abstract}
-Light damage dosimetry is essential for preserving cultural heritage and avoiding permanent photochemical degradation. Modern approaches to simulation of light dosimetry employ computationally heavy off-line software lacking in interactivity; thus, planning processes are hindered. In order to overcome such difficulties, ChronoLux, an innovative Digital Twin solution using Texture Space Ray Tracing technique for interactive light dosimetry is proposed. Instead of utilizing conventional screen-space algorithms that do not incorporate physical information on the temporal changes in energy into the UV-map of the artefact, ChronoLux offers real-time editing of architectural materials and artifact positioning. Moreover, apart from interactivity, the proposed approach provides instant results regarding dose variation over the surface of the object. Results of a year-long simulation prove that the framework produces metrologically precise information despite being fully interactive: with proper environmental adjustments, peak dose per annum dropped from 6.6 M to less than 150 kLux-Hours without disturbing Monte Carlo sensor convergence.
+    Light damage dosimetry is essential for preserving cultural heritage and avoiding permanent photochemical degradation. Modern approaches to simulation of light dosimetry employ computationally heavy off-line software lacking in interactivity; thus, planning processes are hindered. In order to overcome such difficulties, ChronoLux, an innovative Digital Twin solution using Texture Space Ray Tracing technique for interactive light dosimetry is proposed. Instead of utilizing conventional screen-space algorithms that do not incorporate physical information on the temporal changes in energy into the UV-map of the artefact, ChronoLux offers real-time editing of architectural materials and artifact positioning. Moreover, apart from interactivity, the proposed approach provides instant results regarding dose variation over the surface of the object. Results of a year-long simulation prove that the framework produces metrologically precise information despite being fully interactive: with proper environmental adjustments, peak dose per annum dropped from 6.6 M to less than 150 kLux-Hours without disturbing Monte Carlo sensor convergence.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Digital Twins, Cultural Heritage, Ray Tracing, Light Dosimetry, Monte Carlo Integration, GPU Acceleration, DXR
+    Digital Twins, Cultural Heritage, Ray Tracing, Light Dosimetry, Monte Carlo Integration, GPU Acceleration, DXR
 \end{IEEEkeywords}
 
 \section{Introduction}
 
-Light dosimetry is the calculation of radiative energy (in Lux-Hours) incident upon the surface during a certain amount of time period. The calculation is required for the conservation of cultural heritage where museum curators want to protect artifacts from light exposure and excessive heating. 
+Light dosimetry is the calculation of radiative energy (in Lux-Hours) incident upon the surface during a certain amount of time period. The calculation is required for the conservation of cultural heritage where museum curators want to protect artifacts from light exposure and excessive heating.
 
 Traditionally, such type of prediction was performed using some generalized models of lighting and/or off-line architectural rendering solutions. The problem with these approaches is that due to being off-line, rendering-based approaches, they prevent the possibility to evaluate the influence of window glazing changes, materials of the rooms and objects themselves, and so forth in real time. To fill this gap, the authors propose to use the concept of Digital Twin to estimate light doses interactively. In other words, unlike camera-to-image ray casting approach used by many existing tools, the new technique uses a texture space ray tracing when texture coordinates are used to cast rays and produce realistic irradiance values. When combined with the Perez all-weather sky model and NEE, both ambient and direct irradiation can be estimated interactively. Furthermore, the concept of Digital Twin allows performing the process of irradiance values accumulation independently of a certain screen space or camera position.
 
@@ -93,56 +94,59 @@ The architecture of ChronoLux is described in more detail below in terms of syst
 The ability to serialize the scene using an effective engine is crucial for the viability of the framework as a Persistent Digital Twin. Not only does the UI manage the interactive material library and solar data feed, but it automatically persists all changes made to objects, such as translations and scaling, as well as material assignment in terms of reflectivity and transmissiveness, on a submesh level. This process of seamless persistence allows any experimental setup, including those architectural modifications tested in our experiments, to persist indefinitely, without any loss of fidelity.
 
 \begin{figure*}[t]
-\centerline{\includegraphics[width=0.7\textwidth]{architecture.png}}
-\caption{High-level system architecture of ChronoLux, demonstrating the decoupled data flow from the UXML UI layer to the DX12 GPU Compute Pipeline, culminating in persistent CSV/EXR storage.}
-\label{fig:architecture}
+    \centerline{\includegraphics[width=0.8\textwidth]{architecture.png}}
+    \caption{High-level system architecture of ChronoLux, demonstrating the decoupled data flow from the UXML UI layer to the DX12 GPU Compute Pipeline, culminating in persistent CSV/EXR storage.}
+    \label{fig:architecture}
 \end{figure*}
 
 \subsection{The Physics of Light Dosimetry}
 
 In order to simulate photo-degradation of historical artifacts properly, it is necessary to create a mathematically rigorous model of light exposure. Traditional conservator methods consider the amount of light falling on an object (irradiance) as an integral of incoming radiance, projected along the incident angle using Lambert's Cosine Law:
 \begin{equation}
-E = \int_{\Omega} L_i(\omega_i) \cdot \cos(\theta) \, d\omega_i
+    E = \int_{\Omega} L_i(\omega_i) \cdot \cos(\theta) \, d\omega_i
 \end{equation}
 ChronoLux framework applies a discrete approximation of the above-mentioned integration process via summing up all hourly exposures within a full meteorological year of 8760 hours: $D_{total} \approx \sum_{t=1}^{8760} E(t) \cdot \Delta t$. In order to provide physically sound energy conservation and inter-reflections of light rays within the environment, all architectural materials in the environment have the constraint on the sum of reflectance ($R$) and transmittance ($T$): $R + T \le 1.0$. The above-mentioned mathematical rigor guarantees that radiometric data exported from the Digital Twin will be perfectly aligned with established scientific recommendations \cite{cie2004control} and would serve as a solid basis for further action by the curator instead of meaningless pixel values.
 
 \subsection{Texture Space Ray Tracing Architecture}
 
-One of the fundamental limitations of the current HW accelerated ray tracing framework such as DirectX 12 is its dependence on screen space rendering. In traditional game engine architecture, a special type of camera is used, where rays are casted outward to represent visible pixels. As a result, anything lying outside the field of view of the camera is simply clipped away. This approach is completely unacceptable in the context of scientific light dosimetries where the continuous irradiance measurement of the whole geometrical surface is mandatory regardless of where exactly the user is looking. In order to overcome this limitation, the ChronoLux framework re-architects the DXR pipeline into Texture Space. 
+One of the fundamental limitations of the current HW accelerated ray tracing framework such as DirectX 12 is its dependence on screen space rendering. In traditional game engine architecture, a special type of camera is used, where rays are casted outward to represent visible pixels. As a result, anything lying outside the field of view of the camera is simply clipped away. This approach is completely unacceptable in the context of scientific light dosimetries where the continuous irradiance measurement of the whole geometrical surface is mandatory regardless of where exactly the user is looking. In order to overcome this limitation, the ChronoLux framework re-architects the DXR pipeline into Texture Space.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.35\textwidth]{pipeline.png}}
-\caption{The Texture Space Ray Tracing pipeline. The architecture bypasses the camera by pre-computing UV Position/Normal maps, allowing the compute shader to launch rays directly from the artifact's surface.}
-\label{fig:pipeline}
+    \centerline{\includegraphics[width=\columnwidth]{pipeline.png}}
+    \caption{The Texture Space Ray Tracing pipeline. The architecture bypasses the camera by pre-computing UV Position/Normal maps, allowing the compute shader to launch rays directly from the artifact's surface.}
+    \label{fig:pipeline}
 \end{figure}
 
-In brief, given an input 3D model, the framework runs special UV baker pre-pass where UV map is calculated. At this stage, the system also produces special RenderTexture in \texttt{RGBFloat} format storing Position and Normal coordinates in world space at every texel. Careful attention is paid to the fact that Z-clipping in this prepass must be set to $Z = 0.5$ as well as inversion of Y axis in order to conform to DirectX12 texture coordinates requirements. Finally, the core Ray Tracing Compute Shader is called in a way that makes its every thread to correspond to particular UV texel. As a consequence, every millimeter of the 3D model surface is independently calculating lighting conditions. 
+In brief, given an input 3D model, the framework runs special UV baker pre-pass where UV map is calculated. At this stage, the system also produces special RenderTexture in \texttt{RGBFloat} format storing Position and Normal coordinates in world space at every texel. Careful attention is paid to the fact that Z-clipping in this prepass must be set to $Z = 0.5$ as well as inversion of Y axis in order to conform to DirectX12 texture coordinates requirements. Finally, the core Ray Tracing Compute Shader is called in a way that makes its every thread to correspond to particular UV texel. As a consequence, every millimeter of the 3D model surface is independently calculating lighting conditions.
 
 \begin{figure}[htbp]
-\begin{algorithmic}[1]
-\REQUIRE $PositionMap$, $NormalMap$, $AccumulationBuffer$, $DeltaTime$
-\FOR{\textbf{each} thread $id \in \text{DispatchThreadID}$}
-    \STATE $rayOrigin \leftarrow PositionMap[id.xy].xyz$
-    \STATE $rayNormal \leftarrow NormalMap[id.xy].xyz$
-    \IF{$||rayNormal|| < 0.1$}
+    \begin{algorithmic}
+        \REQUIRE $PosMap, NormMap, SunDir, N_{samples}, \Delta t$
+        \FOR{\textbf{each} thread $id \in \text{DispatchThreadID}$}
+        \STATE $\mathbf{p} \leftarrow PosMap[id].xyz$
+        \STATE $\mathbf{n} \leftarrow NormMap[id].xyz$
+        \IF{$||\mathbf{n}|| < 0.1$}
         \STATE \textbf{return}
-    \ENDIF
-    \STATE $ray.Origin \leftarrow rayOrigin + rayNormal \times 0.001$
-    \STATE $ray.TMin \leftarrow 0.01$
-    \STATE $ray.TMax \leftarrow 1000.0$
-    \STATE $irradiance \leftarrow \textsc{TraceRadiance}(ray, rayNormal)$
-    \STATE $AccumulationBuffer[id.xy] \leftarrow AccumulationBuffer[id.xy] + irradiance \times DeltaTime$
-\ENDFOR
-\end{algorithmic}
-\caption{Pseudocode for Texture Space Ray Tracing Algorithm}
-\label{alg:ts_raytrace}
+        \ENDIF
+        \STATE $E_{dir} \leftarrow \textsc{TraceShadow}(\mathbf{p}, SunDir) \cdot \max(0, \mathbf{n} \cdot SunDir)$
+        \STATE $E_{ind} \leftarrow 0$
+        \FOR{$i = 1$ \textbf{to} $N_{samples}$}
+        \STATE $\omega_i \leftarrow \textsc{SampleCosineHemisphere}(\mathbf{n})$
+        \STATE $E_{ind} \leftarrow E_{ind} + \textsc{TracePerezSky}(\mathbf{p}, \omega_i)$
+        \ENDFOR
+        \STATE $E_{total} \leftarrow E_{dir} + (E_{ind} / N_{samples}) \cdot \pi$
+        \STATE $DoseMap[id] \leftarrow DoseMap[id] + E_{total} \cdot \Delta t$
+        \ENDFOR
+    \end{algorithmic}
+    \caption{Pseudocode for Texture Space Ray Tracing Algorithm}
+    \label{alg:ts_raytrace}
 \end{figure}
 
 As it is shown in Algorithm~\ref{alg:ts_raytrace}, the proposed architecture makes the process of light simulation completely detached from screen space thus ensuring permanent bake down of energy data into the texture map. Thus, a very convenient irradiance accumulator is implemented which permanently maps thermal and light stress onto the geometry surface.
 
 \subsection{Environmental Modeling and NEE}
 
-Calculating cumulative impact of irradiance requires simulation of the whole spectrum of light ranging from ambient skylight illumination to direct sunlight radiation throughout one meteorological year. Static single directional light source cannot properly represent the dynamic shadow behavior created by moving windows or changing position of the sun. To solve this issue, ChronoLux incorporates Perez All-Weather Sky Model \cite{perez1993all} that computes precise sky luminance values according to real world climatic conditions and solar altitude. 
+Calculating cumulative impact of irradiance requires simulation of the whole spectrum of light ranging from ambient skylight illumination to direct sunlight radiation throughout one meteorological year. Static single directional light source cannot properly represent the dynamic shadow behavior created by moving windows or changing position of the sun. To solve this issue, ChronoLux incorporates Perez All-Weather Sky Model \cite{perez1993all} that computes precise sky luminance values according to real world climatic conditions and solar altitude.
 
 During the ray generation kernel, the framework uses Next Event Estimation technique (NEE) by leveraging Monte Carlo path tracing algorithm to converge faster. In particular, in every UV texel shader performs separation of the rendering integral into two parts. Firstly, it casts the shadow ray pointing directly to localized solar disc and computes the irradiance, taking account of any architectural occlusions. Secondly, it performs a weighted sample cosine distribution across hemisphere in order to accumulate diffuse ambient skylight irradiance according to Perez distribution. Such an approach makes it possible to simulate complex high frequency architectural shadows, while not introducing additional Monte Carlo noise and not forcing us to use a large number of samples.
 
@@ -151,11 +155,32 @@ During the ray generation kernel, the framework uses Next Event Estimation techn
 Despite the fact that heat map visualization (with consideration of the Inferno color palette) provides valuable information for the qualitative assessment of the scene, it cannot be used to publish any results or provide scientific information needed for the purposes of conservation. Therefore, the quantitative availability of the information about light dose becomes critical in terms of statistical analysis. While the visualization allows us to identify problem areas on the scene, it does not provide enough information to confirm the presence of problems and take appropriate measures. For this reason, the idea of placing virtual Lux Sensors outside the scene was implemented. They allow for automatic positioning of control probes and extraction of the telemetry data right from the accumulation buffer without tonemapping. At this stage, we can start analyzing such data as:
 
 \begin{equation}
-\sigma^2 = \frac{1}{N} \sum_{i=1}^{N} (D_i - \bar{D})^2
+    \sigma^2 = \frac{1}{N} \sum_{i=1}^{N} (D_i - \bar{D})^2
 \end{equation}
-Furthermore, these virtual Lux probes calculate real time Monte Carlo convergence errors compared to theoretical values. Considering the fact that any attempt of GPU to CPU readout introduces serious synchronization issues, the telemetry process proceeds asynchronously utilizing a background headless thread in C\#. The thread safely sums up every hourly delta value as well as maximum exposure and variance metrics, exporting the results to a standard CSV array without interrupting 60 FPS render cycle.
+Furthermore, these virtual Lux probes calculate real time Monte Carlo convergence errors compared to theoretical values. Considering the fact that any attempt of GPU to CPU readout introduces serious synchronization issues, the telemetry process proceeds asynchronously utilizing a background headless thread in C\#. As detailed in Algorithm~\ref{alg:async_telemetry}, this thread safely sums up every hourly delta value as well as maximum exposure and variance metrics, exporting the results to a standard CSV array without interrupting the 60 FPS render cycle.
 
-
+\begin{figure}[htbp]
+    \begin{algorithmic}
+        \REQUIRE $AccumBuf$, $CSVStream$, $CurrentHour$
+        \STATE $\textsc{DispatchComputeShader}(CurrentHour)$
+        \STATE $Request \leftarrow \textsc{AsyncGPUReadback}(AccumBuf)$
+        \WHILE{\textbf{not} $Request.isDone$}
+        \STATE \textbf{yield return} $\text{null} \quad \text{// Maintain 60 FPS render cycle}$
+        \ENDWHILE
+        \STATE $Data \leftarrow Request.\textsc{GetData}()$
+        \STATE $\mu \leftarrow 0, \; MaxDose \leftarrow 0, \; \sigma^2 \leftarrow 0$
+        \FOR{\textbf{each} $p \in Data$}
+        \STATE $\mu \leftarrow \mu + (p / N)$
+        \STATE $MaxDose \leftarrow \max(MaxDose, p)$
+        \ENDFOR
+        \FOR{\textbf{each} $p \in Data$}
+        \STATE $\sigma^2 \leftarrow \sigma^2 + (p - \mu)^2 / N$
+        \ENDFOR
+        \STATE $CSVStream.\textsc{Append}(CurrentHour, MaxDose, \mu, \sigma^2)$
+    \end{algorithmic}
+    \caption{Asynchronous Headless Telemetry Extraction Pipeline}
+    \label{alg:async_telemetry}
+\end{figure}
 
 
 \section{Case Studies \& Empirical Results}
@@ -171,23 +196,23 @@ Scenario A uses the baseline setup of the asset being situated in a highly expos
 This configuration presents a worst case baseline of unlimited light exposure to the asset.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig1a_cumulative_max_dose.png}}
-\caption{CIE Light Dosimetry results for Scenario A reveal cumulative light stress exposure over 8760 hours resulting in a large peak light dose of 6.6M Lux-Hours far greater than the maximum recommended light stress of 50,000 Lux-Hours.}
-\label{fig:scenario_a_max}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig1a_cumulative_max_dose.png}}
+    \caption{CIE Light Dosimetry results for Scenario A reveal cumulative light stress exposure over 8760 hours resulting in a large peak light dose of 6.6M Lux-Hours far greater than the maximum recommended light stress of 50,000 Lux-Hours.}
+    \label{fig:scenario_a_max}
 \end{figure}
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig1b_cumulative_avg_dose.png}}
-\caption{CIE Light Dosimetry results for Scenario A showing cumulative average dose over the 8760 hours.}
-\label{fig:scenario_a_avg}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig1b_cumulative_avg_dose.png}}
+    \caption{CIE Light Dosimetry results for Scenario A showing cumulative average dose over the 8760 hours.}
+    \label{fig:scenario_a_avg}
 \end{figure}
 
 As shown in Figure~\ref{fig:scenario_a_max} and Figure~\ref{fig:scenario_a_avg}, the result of such an extreme configuration is the catastrophic peak light dose of 6.6M Lux-Hours  far surpassing the maximum light stress capacity of CIE's recommended 50,000 Lux-Hour threshold for sensitive materials \cite{cie2004control}.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig4_diurnal_heatmap.png}}
-\caption{A heat map of diurnal exposure illustrates hourly exposure levels in 365-day cycle, displaying high frequency peaks corresponding to solar noon hours and seasonal solar elevation changes.}
-\label{fig:scenario_a_diurnal}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig4_diurnal_heatmap.png}}
+    \caption{A heat map of diurnal exposure illustrates hourly exposure levels in 365-day cycle, displaying high frequency peaks corresponding to solar noon hours and seasonal solar elevation changes.}
+    \label{fig:scenario_a_diurnal}
 \end{figure}
 
 The plot shown in Figure~\ref{fig:scenario_a_diurnal} visualizes the diurnal variation in illumination levels. Note the spikes of intensity at solar noon time and changes at solstice periods in June/December, highlighting the necessity of computation of a full meteorological year in order to calculate a precise diurnal profile rather than using static offline lightmaps.
@@ -196,9 +221,9 @@ The plot shown in Figure~\ref{fig:scenario_a_diurnal} visualizes the diurnal var
 In order to test the ability of our preventative conservation measures, we took advantage of the interactive features of our Digital Twin and performed a comparative study of 3 scenarios against our baseline setup A. Scenario B (Material Intervention) involves changing the environmental setup, but keeping the original position of the asset. It includes replacing the window glass with conservation tinted glass that blocks UV radiation (transmittance $T = 0.45$, albedo $R = 0.12$) and reducing the amount of reflected ambient light by making the floor material matte ($R = 0.15$). Scenario C (Positional Optimization) explores the effects of geometric occlusion, the asset was placed in a shaded corner of the room. The architectural materials were restored to their initial highly reflective state. Lastly, Scenario D (Combined Intervention) explores the interaction of changing the location and adding protective glass and floor materials.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig2_final_dose_bar.png}}
-\caption{Comparative study of peak light dose in four scenarios illustrates the effectiveness of Scenario D that combines optimization of the asset location with implementation of the protective materials.}
-\label{fig:scenario_comparative_bar}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig2_final_dose_bar.png}}
+    \caption{Comparative study of peak light dose in four scenarios illustrates the effectiveness of Scenario D that combines optimization of the asset location with implementation of the protective materials.}
+    \label{fig:scenario_comparative_bar}
 \end{figure}
 
 The telemetry results shown in Figure~\ref{fig:scenario_comparative_bar} demonstrate a substantial reduction in light dosimetry in all three proposed scenarios compared to the baseline of 6.6M Lux-Hours. Scenario B reduces the peak light dose to 150k Lux-Hours, while Scenario D provides the best overall metrological protection.
@@ -209,18 +234,23 @@ These results illustrate the usefulness of our Digital Twin for simulating and v
 Changing the location of the asset in Scenarios C and D is necessary to explore the effects of geometric occlusion and represents the strict mathematical stress test for the NEE functionality.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig5a_beam_vs_diffuse.png}}
-\caption{Decomposition of light dosimetry in Scenario A shows effective separation of direct solar beam from diffuse Perez ambient skylight using our Next Event Estimation algorithm, with direct beam dominating the exposure.}
-\label{fig:beam_diffuse_a}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig5_beam_vs_diffuse.png}}
+    \caption{Decomposition of light dosimetry in Scenario A shows effective separation of direct solar beam from diffuse Perez ambient skylight using our Next Event Estimation algorithm, with direct beam dominating the exposure.}
+    \label{fig:beam_diffuse}
 \end{figure}
+
+As shown in Figure~\ref{fig:beam_diffuse}, our engine is able to distinguish between direct beam irradiance and diffuse ambient skylight. This confirms that our geometric occlusion successfully filters out the direct beam stress and leaves the asset exposed predominantly to Perez diffuse skylight.
+
+\subsection{Phenomenological Analysis: Window vs. Corner Geometry}
+An analysis over a span of 10 days during the winter solstice was carried out to demonstrate the capabilities of the Digital Twin regarding modeling non-traditional geometries in daylighting (Figure~\ref{fig:window_vs_corner}). This study involved comparing peak hourly doses for artifacts placed next to the window and those of artifacts placed deep in a room corner.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig5b_beam_vs_diffuse_scenario_d.png}}
-\caption{Decomposition of light dosimetry in Scenario D reveals a significantly larger diffuse/indirect composition compared to Scenario A, validating the impact of geometric occlusion.}
-\label{fig:beam_diffuse_d}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig6_window_vs_corner_comparison.png}}
+    \caption{The 10 day winter solstice comparison of peak hourly doses for artifacts placed next to windows with artifacts placed deep in room corners is presented. As seen from the empirical results below, the case with artifacts placed next to the window is dominated by a large direct solar component, while no direct sunlight falls on the second type of artifacts and the light dose is exclusively determined by the indirect and diffuse ambient contribution.}
+    \label{fig:window_vs_corner}
 \end{figure}
 
-As shown in Figure~\ref{fig:beam_diffuse_a} and Figure~\ref{fig:beam_diffuse_d}, our engine is able to distinguish between direct beam irradiance and diffuse ambient skylight. This confirms that our geometric occlusion successfully filters out the direct beam stress and leaves the asset exposed predominantly to Perez diffuse skylight.
+The data demonstrates the dynamic nature of daylighting geometry with respect to the winter solstice. Artifacts placed next to the window experience large direct sunlight concentrations reaching 30,000 Lux-Hours and largely exceeding any indirect ambient exposures. In the case of artifacts placed inside the room corner, the direct solar contribution is completely blocked by the architecture, resulting in a zero dose from this source. Hence, the indirect dose makes up 100\% of the total exposure and is caused by scattered light from the sky. This conclusively proves the simulator's capability to correctly compute complex cosine-weighted hemispherical irradiance and physical shadowing without resorting to approximations.
 
 \section{Performance \& Validation}
 
@@ -233,15 +263,15 @@ Though the process of heat maps generation requires minor computational effort, 
 The sensors in question are capable of sampling raw, untone-mapped floating point telemetry data taken from GPU accumulation buffers asynchronously. They are automatically positioned outside the scene bounds; hence, the irradiance measured at those locations can be used for the comparison with theoretical results based on the cited formulas. Convergence error of the Monte Carlo simulation is evaluated via $SEM = \sigma / \sqrt{N}$ formula, where $SEM$ stands for standard error of the mean. It should be noted that $\sigma$ is sample standard deviation while $N$ equals the number of rays sampled per pixel. As weather simulation integrates with the program, the error gradually decreases to zero.
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig3a_spatial_dose_variance.png}}
-\caption{Continuous monitoring of light spatial variance tracking aggregated structural stress on the artifact.}
-\label{fig:validation_stress_variance}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig3a_spatial_dose_variance.png}}
+    \caption{Continuous monitoring of light spatial variance tracking aggregated structural stress on the artifact.}
+    \label{fig:validation_stress_variance}
 \end{figure}
 
 \begin{figure}[htbp]
-\centerline{\includegraphics[width=0.9\columnwidth]{fig3b_monte_carlo_convergence.png}}
-\caption{Virtual Sensor Monte Carlo convergence error confirms stable convergence and validates our GPU-based calculation pipeline.}
-\label{fig:validation_stress_error}
+    \centerline{\includegraphics[width=0.9\columnwidth]{fig3b_monte_carlo_convergence.png}}
+    \caption{Virtual Sensor Monte Carlo convergence error confirms stable convergence and validates our GPU-based calculation pipeline.}
+    \label{fig:validation_stress_error}
 \end{figure}
 
 The graphs provided in Figure~\ref{fig:validation_stress_variance} and Figure~\ref{fig:validation_stress_error} prove that Monte Carlo convergence error steadily drops and stabilizes during the calculation process. Spatial variance converges with the physical light stress accumulation rather than noise generated by the Monte Carlo algorithm, thereby proving the reliability of the GPU-based integration and allowing export of physically accurate CSV arrays.
@@ -251,9 +281,9 @@ In addition, the noted differences in terms of shape among the variance curves c
 
 
 \section{Conclusion \& Future Work}
-This paper presented ChronoLux, an interactive, hardware-accelerated Digital Twin framework explicitly engineered for the scientific metrology of photodegradation in cultural heritage artifacts. By fundamentally rethinking the rendering pipeline and shifting from transient screen-space rasterization to permanent Texture Space Ray Tracing, we successfully solved the temporal and spatial limitations that previously restricted graphics engines from performing rigorous radiometric dosimetry. 
+This paper presented ChronoLux, an interactive, hardware-accelerated Digital Twin framework explicitly engineered for the scientific metrology of photodegradation in cultural heritage artifacts. By fundamentally rethinking the rendering pipeline and shifting from transient screen-space rasterization to permanent Texture Space Ray Tracing, we successfully solved the temporal and spatial limitations that previously restricted graphics engines from performing rigorous radiometric dosimetry.
 
-Through the integration of the Perez All-Weather Sky Model and a highly optimized DirectX 12 Monte Carlo path tracer featuring Next Event Estimation (NEE), ChronoLux demonstrated the capability to continuously integrate 8760 hourly solar intervals within a stable, interactive 60 FPS viewport. This represents a monumental leap in computational efficiency, compressing what traditionally required hours of offline, CPU-bound rendering into a real-time, exploratory tool. 
+Through the integration of the Perez All-Weather Sky Model and a highly optimized DirectX 12 Monte Carlo path tracer featuring Next Event Estimation (NEE), ChronoLux demonstrated the capability to continuously integrate 8760 hourly solar intervals within a stable, interactive 60 FPS viewport. This represents a monumental leap in computational efficiency, compressing what traditionally required hours of offline, CPU-bound rendering into a real-time, exploratory tool.
 
 The empirical case studies validated the framework's efficacy as a non-destructive conservation sandbox. By simulating the long-term light exposure of a 2K high-fidelity Stanford Bunny scan, we demonstrated how the Digital Twin can isolate and quantify the exact radiometric impact of varying environmental interventions. Scenario testing revealed that synergistic interventions---such as repositioning the artifact to exploit geometric occlusion alongside the installation of UV-blocking tinted glazing and matte flooring---could successfully reduce a catastrophic 6.6 million Lux-Hour peak dose down to safe conservation thresholds of less than 150k Lux-Hours. Most critically, the scientific metrology was mathematically validated. By utilizing an automated array of out-of-bounds virtual Lux Sensors to sample the raw, untonemapped accumulation buffers, we tracked the Monte Carlo convergence error via the standard error of the mean ($SEM = \sigma / \sqrt{N}$). The continuous integration proved that the variance graphs structurally adhere to the physical realities of shifting solar vectors, confirming that the engine reliably calculates stable, physically-based light transport dynamics rather than stochastic rendering noise.
 

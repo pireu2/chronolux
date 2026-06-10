@@ -108,3 +108,15 @@ repomix-output.md
 
 !/DataProcessing/scenario_*.csv
 /DataProcessing/figures/*
+
+# LaTeX build files
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.dvi
