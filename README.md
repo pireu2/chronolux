@@ -4,6 +4,7 @@
 [![Render Pipeline](https://img.shields.io/badge/Pipeline-HDRP-blue)](#)
 [![API](https://img.shields.io/badge/API-DirectX_12_DXR-green)](#)
 [![Status](https://img.shields.io/badge/Status-Software_Complete-success)](#)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **ChronoLux** is a scientifically rigorous metrology and visualization tool designed for the preventive conservation of cultural heritage artifacts. Built as a CS Diploma Project, it functions as a "Digital Twin," simulating long-term solar radiation exposure and calculating cumulative environmental light damage (measured in **Lux-Hours**) on 3D artifacts.
 
@@ -22,7 +23,7 @@ Standard ray tracers shoot rays from a virtual camera to evaluate pixels on a sc
 To ensure physically accurate solar illumination, ChronoLux integrates the **Perez Sky Model**. It calculates the precise astronomical altitude and azimuth of the sun based on geolocation (Latitude/Longitude), UTC offset, and time of year. Diffuse skylight is evaluated using **Cosine-Weighted Hemisphere Importance Sampling** to accurately simulate ambient scattering.
 
 ### 3. Next Event Estimation (NEE)
-The custom stochastic RayGen kernel utilizes Next Event Estimation to explicitly sample direct sunlight alongside recursive indirect multi-bounce reflections, unifying the direct and indirect light calculation for maximum statistical convergence.
+The custom stochastic RayGen kernel utilizes Next Event Estimation to explicitly sample direct sunlight alongside recursive indirect multi-bounce reflections, unifying the direct and indirect light calculation for maximum statistical convergence. Critically, shadow rays dynamically traverse refractive surfaces (e.g. conservation glass windows), correctly attenuating energy instead of prematurely terminating.
 
 ### 4. Energy Conservation
 All scene geometry is bound by strict thermodynamic laws. The custom `SimulationMaterial` component allows real-time configuration of physical Reflectance ($R$) and Transmittance ($T$) values, algorithmically clamping the system to ensure $R + T \le 1.0$.
@@ -32,6 +33,7 @@ All scene geometry is bound by strict thermodynamic laws. The custom `Simulation
 ##  Core Capabilities
 
 - **Time-Stepping Dosimetry:** Accumulates instantaneous illuminance ($E$) in Lux over configurable chronological steps (e.g., hourly intervals across 365 days) into a cumulative dose ($D_{total}$) in Lux-Hours.
+- **Decoupled Direct/Indirect Tracking:** Uses multi-target Texture Space shading to isolate and independently track structural light damage originating from Direct Solar Beams versus Diffuse Perez ambient scattering.
 - **Virtual Lux Sensors:** Deployable 3D probes that act as digital light meters. They calculate expected theoretical irradiance ($E = E_{beam} \cdot \cos(\theta) + E_{diffuse} \cdot 0.5$) and validate the Monte Carlo raytracer's output, actively tracking percentage error margins.
 - **False-Color Heatmap Visualization:** High-performance HDRP surface shader maps the raw Float32 Lux-Hour data into an "Inferno" (Purple-Red-Yellow) gradient. This enables curators to instantly identify microscopic high-risk exposure hotspots.
 - **Deterministic RTAS:** Enforces absolute strict sorting of Renderer Instance IDs during Acceleration Structure generation to guarantee repeatable scientific data across different hardware executions.
@@ -57,7 +59,7 @@ Because ChronoLux relies on raw hardware-accelerated ray tracing to calculate mi
 
 ChronoLux provides highly granular export mechanisms for external data analysis (e.g., Python, MATLAB, Excel):
 
-1.  **SimulationMetrics.csv:** A comprehensive time-series dataset generated asynchronously. It tracks Hourly Time, Sun Altitude/Azimuth, Exterior Beam/Diffuse Lux, Artifact Delta Max/Avg Dose, Cumulative Dose, Hourly Variance, Surface Coverage (%), and Virtual Sensor Error tracking.
+1.  **SimulationMetrics.csv:** A comprehensive time-series dataset generated asynchronously. It tracks Hourly Time, Sun Altitude/Azimuth, Exterior Beam/Diffuse Lux, Artifact Delta Max/Avg Dose, Cumulative Dose, Hourly Variance, Surface Coverage (%), and Virtual Sensor Error tracking, alongside decoupled Direct and Indirect stress markers.
 2.  **Daily Dose EXR Snapshots:** Exports full 32-bit floating-point High Dynamic Range `.exr` textures for every day of the simulation. This allows exact surface irradiance maps to be analyzed externally or re-imported into ChronoLux's UI timeline slider.
 
 ---

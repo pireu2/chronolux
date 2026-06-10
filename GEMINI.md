@@ -34,6 +34,8 @@ The goal is to build a custom, mathematically rigorous ray tracing simulator to 
 - **Asynchronous Loading UX:** Added a non-blocking "LOADING ASSETS" overlay with a real-time progress bar and status updates.
 - **Headless Metrology Export:** Fully asynchronous background CSV generation with decoupled mathematics tracking DeltaAvgDose, MaxDose, DoseVariance, Coverage, and precise Virtual Lux Sensor error margins.
 - **EXR Snapshotting:** Automated saving of daily high dynamic range heatmaps for external data visualization.
+- **Direct/Indirect Separation:** Separated accumulated dosimetry into distinct `_DirectDoseMap` and `_IndirectDoseMap` buffers for granular metric tracking.
+- **Transparent Shadow Traversal:** Modified `PathTracer.hlsl` to adaptively traverse direct sun shadow rays through refractive geometry instead of prematurely terminating.
 
 ## Current Focus (Academic Polish)
 

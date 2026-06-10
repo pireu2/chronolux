@@ -1,4 +1,5 @@
 *.tex linguist-detectable=false
 *.ipynb linguist-detectable=false
 *.html linguist-detectable=false
+*.sty linguist-detectable=false
 Paper/* linguist-vendored
