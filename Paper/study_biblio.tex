@@ -1,40 +1,104 @@
 \chapter{Bibliographic Research}\label{ch:studiubib}
-
 \pagestyle{fancy}
 
+The development of a hardware-accelerated Digital Twin for real-time light dosimetry exists at the intersection of several complex scientific domains. This chapter provides a rigorous review of the state-of-the-art literature encompassing preventive conservation metrology, mathematical global illumination, and modern graphics hardware architectures. By analyzing existing methodologies, we establish both the scientific foundation of this thesis and the critical limitations of current tools that \textit{ChronoLux} seeks to resolve.
 
-{\color{blue}\noindent This chapter should take between 3 and 10 pages.\\}
+\section{Preventive Conservation and Empirical Dosimetry}
 
-Bibliographic research has as an objective the establishment of the references for the project, within the project domain/thematic. While writing this chapter (in general the whole document), the author will consider the knowledge accumulated from several dedicated disciplines in the second semester, 4$^{th}$ year (Project Elaboration Methodology, etc.), and other disciplines that are relevant to the project theme.
+The fundamental necessity of light dosimetry is rooted in the photochemical vulnerability of cultural heritage artifacts. As demonstrated by Michalski \cite{michalski1987damage}, both visible light and ultraviolet (UV) radiation induce irreversible molecular degradation in organic and synthetic materials. At a molecular level, photons carry energy inversely proportional to their wavelength. UV radiation (ranging from 10nm to 400nm) carries sufficient quantum energy to break the covalent bonds of pigments, binders, and structural fibers. This photochemical degradation manifests physically as color fading (bleaching), yellowing of varnishes, and structural embrittlement of textiles and paper.
 
-Each reference \textbf{must} be cited within the document. Please look at the examples below (depending on the project theme, the presentation of a method/application can vary).
+Because photon-induced decay is strictly cumulative, damage cannot be reversed or "healed" by placing an artifact in the dark; the molecular bonds are permanently severed. To systematically manage this risk, the International Commission on Illumination (CIE) established strict preventive conservation limits and categorized materials into distinct vulnerability classes \cite{cie2004control}:
+\begin{itemize}
+    \item \textbf{Insensitive Materials:} Metals, stone, and ceramics. These materials do not suffer photochemical degradation and require no strict lighting limits.
+    \item \textbf{Low Sensitivity Materials:} Oil and tempera paintings, frescoes, and structural woods. These can tolerate moderate exposure, typically limited to 600,000 Lux-Hours annually.
+    \item \textbf{High Sensitivity Materials:} Watercolors, pastels, tapestries, and antique paper. These artifacts are extremely vulnerable and are strictly capped at 50,000 Lux-Hours annually.
+    \item \textbf{Extreme Sensitivity Materials:} Silk, specific unstable organic dyes, and early photographs. These items demand maximum protection, often restricted to 15,000 Lux-Hours annually.
+\end{itemize}
+Exceeding these precise thresholds accelerates the entropy of the artifact, necessitating highly accurate prediction mechanisms to design safe exhibition spaces.
 
-Referințele are included in the Bibliography chapter.
+Historically, the dominant methodology for tracking this exposure has been the physical measurement of incident light. Silva et al. \cite{silva2020climate} highlight the usage of low-cost data loggers to monitor the microclimate of heritage sites. Furthermore, Chianese et al. \cite{chianese2016internet} propose the concept of the "Internet of Cultural Things," advocating for dense IoT sensor networks embedded within the museum infrastructure.
 
-References can by managed with \href{https://www.jabref.org/}{JabRef}, an application which can be downloaded from \url{https://www.jabref.org/#download}
+\textit{Discussion:} While empirical sensor networks provide undeniable ground-truth data, they suffer from critical operational flaws that severely restrict their utility in modern conservation. First, they are fundamentally reactive. A physical sensor only triggers an alert after the light exposure has already occurred, offering absolutely no predictive capabilities to prevent damage before a new exhibition begins. Second, capturing the complex spatial variance of irradiance across a large, three-dimensional geometric surface requires deploying an impossibly dense grid of physical sensors. Deploying thousands of physical probes across a Renaissance statue is not only financially prohibitive but aesthetically intrusive, and mounting them on delicate surfaces poses an unacceptable structural risk. Ultimately, to transition from reactive measurement to proactive, non-destructive prediction, researchers must utilize virtual, mathematically driven simulations of light transport.
 
-Examples of what should be included in each type of reference can be found at \href{https://libguides.nps.edu/citation/ieee-bibtex}{here}.
+\section{The Metrology of Global Illumination}
 
-About common errors found in online libraries of references you can read at \href{https://www.ece.ucdavis.edu/~jowens/biberrors.html}{here}
+\subsection{Rasterization vs. Ray Tracing in Scientific Simulation}
+In the domain of computer graphics, visualizing virtual environments has historically been dominated by rasterization algorithms. Rasterization operates by projecting 3D polygons onto a 2D screen space and determining visibility through depth buffering. While incredibly fast and well-suited for interactive video games, rasterization is fundamentally incapable of scientific dosimetry. Because rasterization only computes direct visibility from the camera's perspective (frustum culling), it relies heavily on "hacks" and approximations to simulate indirect light---such as Screen Space Ambient Occlusion (SSAO), shadow mapping, and baked light probes. These techniques are heavily biased and provide only an illusion of global illumination.
 
+Conversely, ray tracing explicitly models the physical trajectory of photons as they travel from a light source, intersect with geometry, and reflect or refract based on the physical material properties. Historically, the primary use case for ray tracing has been the generation of stunning, photorealistic graphics. Because it inherently calculates complex optical phenomena such as perfect mirror reflections, soft shadows, and transparent refractions, it has been the gold standard for visual effects (VFX) in cinema and, more recently, high-end video games. However, in these commercial applications, the ultimate goal is merely to deceive the human eye into perceiving realism, often cutting corners on physical accuracy to save rendering time.
 
-In Chapter 4 of ~\cite{Spizner2002}, Spitzner discusses the advantages and disadvantages of honeypot systems.
+Scientific dosimetry requires strict adherence to physical light transport, independent of a virtual camera or human perception. To achieve this, the simulation must rely on mathematically pure, unbiased ray tracing. Rather than generating a visually pleasing pixel on a screen, the path-traced photons must act as perfect radiometric data carriers. This approach is mathematically provable, making it the only viable algorithmic paradigm for measuring real-world irradiance and calculating precise Lux-Hour accumulations in a virtual space.
 
-References will be included in the Bibliography section. The reference format must be IEEE, or similar. The introduction of new references in the Bibliography section, and their citation within the document text can be done manually (by obeying the format), but it is not recommended as it not easy to manage them, or by using the tools mentioned in the last paragraphs of this chapter.
+\subsection{The Rendering Equation and Monte Carlo Integration}
+The foundational methodology for physically based ray tracing is the Rendering Equation, formalized by Kajiya \cite{kajiya1986rendering}. This integral equation mathematically describes the equilibrium of light transport within a scene, stating that the total outgoing radiance from a surface point is the sum of emitted radiance and the integral of incoming radiance scattered over the hemisphere.
 
-In the Bibliography section, there are examples of references to conferences or workshops articles ~\cite{AntoniouSBB05}, journal ~\cite{AntoniouSBDB07}, and books ~\cite{russell1995artificial}, \cite{Spizner2002}. References to applications or online resources (web pages) must include at least a short relevant description in addition to the link~\cite{seleweb}, and other information is available (authors, year, etc.). References that contain only the link to the online resource will be placed in the page footer.
+To solve this infinite-dimensional integral, graphics engines employ Monte Carlo integration. Because it is computationally impossible to evaluate an infinite number of incoming light directions, Monte Carlo methods estimate the integral by casting a finite, random set of rays (samples). The accuracy of this estimation increases as the number of samples approaches infinity, a concept governed by the Law of Large Numbers.
 
-Each reference must be cited within the document text, see example below (depending
-on the project theme, the presentation of a method/application can vary).
+However, uniformly shooting random rays is incredibly inefficient, as most rays will fail to hit a significant light source, resulting in a noisy image (high variance). To solve this, importance sampling is utilized. By defining a Probability Density Function (PDF) that matches the expected distribution of light (e.g., Cosine-Weighted Importance Sampling for Lambertian surfaces), the algorithm preferentially casts rays in directions most likely to contribute significant energy.
 
-%În articolul~\cite{AntoniouSBDB07} autorii prezintă un sistem pentru ...
-In paper~\cite{AntoniouSBDB07} the authors present a system for moving obstacle detection using stereo-vision and an estimation of own movement.
+To ensure that rays do not bounce infinitely inside enclosed spaces, stochastic termination techniques such as Russian Roulette are employed. Instead of enforcing an arbitrary hard cap on the number of bounces, Russian Roulette terminates a ray probabilistically based on the physical albedo of the surface it strikes. Darker surfaces, which absorb more light, have a higher probability of terminating the ray path, ensuring that computational resources are not wasted tracking photons whose energy has already decayed to negligible levels.
 
-The method is based on ... autorii prezintă un sistem pentru detecția obstacolelor în mișcare folosind stereo viziune și estimarea mișcării proprii.
-Metoda se bazează pe ...\textit{discuss the algorithms, data structures, functionality, specific aspects related to the project theme, etc….} Discussion: \textit{pros and cons}.
+\subsection{Physical Material Simulation and Energy Conservation}
+The physical accuracy of a global illumination simulation relies entirely on how mathematically strict its material properties are defined. When a photon intersects a geometric surface, its subsequent behavior is dictated by the material's Bidirectional Reflectance Distribution Function (BRDF) and Bidirectional Transmittance Distribution Function (BTDF). Together, these functions describe how incoming irradiance is scattered, absorbed, or transmitted across the hemisphere of the surface normal.
 
-\section{A Section Name}
-\section{Another Section Name}
-\subsection{A Subsection Name}
-{\color{red}DO NOT copy technology descriptions here}
+Modern computer graphics often rely heavily on complex Physically Based Rendering (PBR) materials. As detailed by Pharr et al. \cite{pharr2016physically}, PBR models utilize advanced microfacet equations (such as GGX distribution) to simulate the microscopic roughness and metallic properties of a surface to achieve extreme photorealism. However, evaluating these complex microgeometry equations introduces massive computational overhead that contributes very little to the calculation of pure radiometric energy dosage on flat architectural surfaces.
 
+Consequently, \textit{ChronoLux} intentionally eschews complex visual PBR in favor of a computationally streamlined, strictly thermodynamic solution. In scientific metrology, materials must adhere to the First Law of Thermodynamics (Energy Conservation). This principle dictates that the sum of a material's Reflectance ($R$), Transmittance ($T$), and Absorptance ($A$) must exactly equal 1.0 ($R + T + A = 1.0$). If a theoretical material reflects 60\% of incoming light and transmits 30\% (such as a tinted window glass), it mathematically must absorb the remaining 10\%.
+
+Simulating these properties is critical for preventive conservation. For example, structural walls generally exhibit Lambertian diffuse reflectance, scattering photons equally in all directions, which drastically influences the ambient indirect lighting of a room. Conversely, window glazing exhibits complex specular transmittance and refraction. Accurately modeling the transmittance curve of UV-blocking glass or the high reflectance of a polished marble floor is mandatory, as these material properties fundamentally dictate the distribution and intensity of the accumulated Lux-Hour dosage on the vulnerable artifacts. By enforcing a strict $R+T+A=1$ model using pure Lambertian and ideal specular distributions, the engine guarantees metrologically valid dosimetry without the performance penalty of microfacet evaluation.
+
+\subsection{Limitations of Offline Rendering}
+The most prominent implementation of these principles in architectural and conservation analysis is the Radiance suite \cite{ward1998rendering}. Radiance employs a backward, deterministic ray-tracing algorithm coupled with irradiance caching to solve the Rendering Equation with exceptional metrological accuracy.
+
+\textit{Discussion:} Radiance provides mathematically provable lighting distributions, making it a gold standard for offline dosimetry. However, its complete reliance on CPU-bound computations results in severe performance bottlenecks. Calculating a single year of cumulative exposure can take several hours, inherently preventing any real-time, interactive exploration of conservation strategies.
+
+Alternative methodologies, such as Precomputed Radiance Transfer (PRT) \cite{sloan2002precomputed}, attempt to achieve real-time global illumination by pre-calculating light transport into spherical harmonics. While PRT offers high performance for static scenes, it completely fails the moment environmental interventions become dynamic. If a conservator wishes to rotate an artifact or change the transmittance of window glazing, the entire PRT lightmap must be recomputed from scratch.
+
+\section{Hardware Acceleration and Heritage Digital Twins}
+
+The synthesis of highly accurate dosimetry with real-time interactivity requires modern architectural paradigms. Jouan and Hallot \cite{jouan2020digital}, as well as Niccolucci et al. \cite{niccolucci2022digital}, define the "Heritage Digital Twin" not merely as a static 3D model (like traditional HBIM), but as a dynamic replica continuously updated with physical data to support preventive conservation policies.
+
+\subsection{Bounding Volume Hierarchies and Ray Traversal}
+Bringing the Rendering Equation into this interactive realm at 60 Frames-Per-Second requires advanced spatial acceleration structures. Computing the intersection of a ray against millions of raw geometric triangles is mathematically intractable for real-time execution. To solve this, scenes are partitioned using a Bounding Volume Hierarchy (BVH).
+
+A BVH is a tree structure where geometry is grouped into Axis-Aligned Bounding Boxes (AABB). The root node contains the entire scene, and each subsequent child node progressively subdivides the geometry until the leaf nodes, which contain the actual triangles. When a ray is cast, it tests against the bounding boxes. If a ray misses a parent AABB, the algorithm instantly discards all millions of triangles contained within it, turning an $\mathcal{O}(n)$ intersection problem into a logarithmic $\mathcal{O}(\log n)$ search.
+
+To optimally construct these trees, the Surface Area Heuristic (SAH) is employed. SAH minimizes the statistical probability of a ray hitting a bounding box by calculating the cost of traversing nodes versus the cost of intersecting triangles, guaranteeing the most efficient BVH structure possible.
+
+\subsection{DirectX Raytracing (DXR) Architecture}
+Historically, constructing and traversing the BVH was entirely handled by software on the CPU. However, as detailed by Burgess \cite{burgess2020rtx}, the introduction of the NVIDIA Turing architecture fundamentally shifted this paradigm by introducing dedicated hardware silicon---RT Cores---explicitly designed to accelerate BVH traversal and ray-triangle intersections.
+
+This hardware acceleration is exposed to developers via the DirectX 12 Raytracing (DXR) API. DXR introduces a two-tier acceleration architecture designed to balance static and dynamic geometry. The Bottom-Level Acceleration Structure (BLAS) houses the raw triangle data for individual meshes and is highly optimized but computationally expensive to build. The Top-Level Acceleration Structure (TLAS) contains lightweight instance references to the BLAS, allowing developers to rigidly transform, rotate, or animate objects instantly without triggering a costly rebuild of the underlying triangle hierarchy.
+
+DXR also introduces a modernized shader pipeline heavily utilized in frameworks like ChronoLux:
+\begin{itemize}
+    \item \textbf{RayGeneration Shader:} The absolute entry point of the pipeline, responsible for invoking the primary rays. Instead of launching rays from a virtual camera, specialized frameworks launch them from Texture Space.
+    \item \textbf{ClosestHit Shader:} Triggered when a ray successfully hits opaque geometry. This is where material characteristics, such as BRDFs, physical albedo, and diffuse interreflections, are evaluated.
+    \item \textbf{AnyHit Shader:} Intercepts a ray before ClosestHit to evaluate transparency or alpha testing. This is crucial for scientific dosimetry when calculating physical transmittance through refractive window glazing without terminating the shadow ray.
+    \item \textbf{Miss Shader:} Triggered when a ray escapes the local geometry entirely. In environmental simulations, the Miss shader queries global illumination models, such as the Perez All-Weather Sky Model \cite{perez1993all}, to calculate exact astronomical solar irradiance and ambient skylight.
+\end{itemize}
+
+\subsection{Variance Reduction and Texture Space Rendering}
+To optimize Monte Carlo integration on this new hardware, Veach and Guibas \cite{veach1995optimally} established the mathematical framework for combining sampling techniques, directly leading to the adoption of Next Event Estimation (NEE). NEE drastically reduces variance by explicitly casting a "shadow ray" directly toward the primary light source at every single bounce. This ensures rapid mathematical convergence, even in indirectly lit museum environments, by decoupling direct solar beams from diffuse ambient scattering.
+
+Finally, to decouple this high-speed ray traversal from the constraints of the camera viewport, Munkberg et al. \cite{hasselgren2016texture} introduced modern texture space caching methodologies. Standard screen-space renderers discard critical lighting data that falls outside the immediate view frustum. By shading directly into the unwrapped UV coordinates of an object, rendering becomes entirely independent of camera occlusion. This paradigm guarantees persistent and accurate radiometric accumulation across the entire geometric topology of an artifact.
+
+\subsection{Solar Telemetry and Ephemeris Models}
+A rigorous dosimetric simulation, especially one simulating an entire meteorological year (8,760 hours), requires exact astronomical positioning of the sun. The solar position dictates the angle of direct irradiance, which directly influences both the length of shadows cast across the artifacts and the intensity of light penetrating through windows.
+
+To calculate this, scientific engines utilize mathematical solar ephemeris models, such as the Solar Position Algorithm (SPA) developed by Reda and Andreas \cite{reda2004solar}. By inputting the geographic Latitude and Longitude of the heritage site, alongside the specific Julian Day of the year and the local time, the model computes the exact solar Zenith (altitude) and Azimuth angles.
+
+Beyond accuracy, computing the solar telemetry is vital for computational optimization. Real-time path tracing is extraordinarily expensive. By calculating the solar altitude before executing the GPU ray-tracing kernel, the simulation can determine whether the sun is below the horizon. If the system detects nighttime hours (between sunset and sunrise), it can instantly skip the path-tracing execution for that hour. This astronomical culling mechanism drastically reduces the total computation time required to simulate an 8,760-hour cycle, bypassing thousands of redundant calculations without sacrificing metrological integrity.
+
+\subsection{The Perez All-Weather Sky Model}
+A virtual simulation of environmental dosimetry is only as accurate as the external light source driving it. While standard 3D rendering often utilizes a simple directional light to represent the sun and a uniform color for the sky, real-world atmospheric scattering is immensely complex. To address this, scientific metrology relies on rigorous atmospheric mathematics, specifically the Perez All-Weather Sky Model \cite{perez1993all}.
+
+The Perez model is an empirical mathematical framework designed to accurately calculate the relative luminance of any point in the sky dome based on real-world meteorological data. Unlike idealized models that only simulate perfectly clear or completely overcast skies, the Perez model utilizes two specific atmospheric parameters:
+\begin{itemize}
+    \item \textbf{Clearness ($\epsilon$):} A metric defining the ratio of direct solar radiation to diffuse sky radiation, effectively quantifying the presence and thickness of cloud cover.
+    \item \textbf{Brightness ($\Delta$):} A metric describing the overall luminous opacity of the atmosphere, influenced by aerosol density and humidity.
+\end{itemize}
+
+By inputting these parameters alongside the precise solar altitude and azimuth, the model generates a highly accurate continuous luminance distribution. It distinctly simulates two critical atmospheric scattering phenomena: \textit{circumsolar brightening} (the intense scattering of light in the immediate vicinity of the solar disk due to Mie scattering) and \textit{horizon brightening} (the luminous gradient caused by Rayleigh scattering through the thicker atmosphere at the horizon). In the context of \textit{ChronoLux}, when a path-traced ray escapes the building's geometry via the DXR Miss shader, its directional vector is passed directly into the Perez mathematical function, returning a physically accurate spectral radiance value for that exact micro-angle of the sky dome.
+
+\textit{Conclusion:} The methodologies reviewed in this chapter demonstrate that while offline renderers (Radiance) are accurate and IoT sensors are empirical, neither supports interactive prediction. By synthesizing the mathematical rigor of Monte Carlo Path Tracing, NEE \cite{veach1995optimally}, and the Perez Sky Model \cite{perez1993all} with the massive hardware acceleration of DXR \cite{burgess2020rtx}, BVH traversal, and Texture Space Ray Tracing \cite{hasselgren2016texture}, the proposed \textit{ChronoLux} framework bridges the critical gap in modern preventive conservation.

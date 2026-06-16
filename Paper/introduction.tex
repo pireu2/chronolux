@@ -1,14 +1,28 @@
-\chapter{Introduction - Project Context}\label{ch:context}
+\chapter{Introduction}\label{ch:context}
 \pagestyle{fancy}
 
-{\color{blue}\noindent Should take 2 to three pages of the paper.\\}
-\noindent What should be here:
+\section{Context and Motivation}
+The concept of cultural heritage conservation is one that is highly complex, being highly scientific and involving the balancing act between access to the public and the protection of artifacts. In museums, it is common practice to face a situation where there is a need to display old paintings, which could be as old as 16th century oil paintings, delicate pieces of cloth and even water colors without damaging them. The most ubiquitous source of degradation of such artifacts, however, is photochemical degradation caused by the presence of light.
 
-\begin{itemize}
-	\item framing the design theme in the contemporary context
-	\item an outline of the exact domain of the design theme
-\end{itemize}
+Light Dosimetry is the metrological way of quantifying the radiative energy, measured in Lux Hours, acting upon an artifact within a specific period. Given that this damage is strictly cumulative and irreversible, it becomes imperative that preventive conservation measures be taken. For this purpose, guidelines set forth by international bodies like the International Commission on Illumination (CIE) are used to govern preventive conservation of artifacts. For highly susceptible items, the recommendation made by CIE is that the maximum limit of energy to which the artifact may be exposed should not exceed 50,000 Lux Hours annually.
 
+\section{Limitations of Existing Solutions}
+Up to now, the management of the stress induced by the light had been relying on two separate paradigms. However, both have their respective limitations when applied to today's workflows in the conservation of valuable heritage.
 
+According to the first approach, physical light measurement can be carried out by the means of IoT sensor networks and photometers. While these devices indeed provide the essential ground truth data, they cannot help predict a threat before its occurrence; therefore, there is always going to be some delay, which makes these sensors unable to provide any proactive measure prior to a new exhibition. Besides, while measuring irradiance at a single point in space, it would take a huge amount of sensors deployed at high density in order to fully cover all possible angles of light incidence in a large object. Not only it would be expensive and unattractive, but mounting these devices on fragile pieces would simply cause irreversible damage. Finally, as every other device with a physical sensor inside, it suffers from calibration error, which needs to be compensated for by regular maintenance.
 
+According to the second one, the issue of predicting is approached by using offline rendering engines like Radiance or Precomputed Radiance Transfer (PRT) lightmaps, which calculate the lighting distribution mathematically and in an extremely reliable way. Yet their inability to exploit hardware acceleration capabilities and being completely CPU-bound renders them impractical for real-time applications due to their poor performance, which results in hours' worth of calculation just for a single, one-year exposure simulation done with hourly precision (which is required in order to achieve proper global illumination).
 
+That is precisely why this offline approach does not allow any interactive exploratory process to be carried out, meaning that conservators can neither explore the possibility of introducing some interventions into the environment—like altering transmittance of window glass, changing room albedo or moving objects around—nor try some optimal combination thereof.
+
+\section{The Proposed Solution: ChronoLux}
+For mitigating the issue of the interactivity and fidelity gap, this research will introduce ChronoLux - an interactive Digital Twin platform designed specifically for near-real-time dosimetry. Making use of modern GPU acceleration capabilities through DirectX 12 Raytracing (DXR), ChronoLux will transform passive artifact three-dimensional representations into interactive, predictive, and accurate simulations.
+
+As opposed to camera-oriented screen-space rendering through camera-to-image ray-casting performed by current generation interactive graphics platforms, ChronoLux introduces a novel architectural approach - the Texture Space Ray Tracing. Regular renderers conduct frustum culling to exclude rays that are cast beyond the view range of the camera. Such an approach is insufficient when simulating light interaction for scientific dosimetry since measurements need to be conducted persistently throughout the entire geometrical surface of an object. Instead, using the artifact's UV coordinates, ChronoLux will cast rays from those points thus baking any cumulative exposure permanently into the object's surface.
+
+In order to guarantee accuracy and metrological precision, the simulation will run under the Perez All-Weather Sky Model that will provide exact positioning of sunlight along with the skylight irradiance. The core of the algorithm will use the stochastic Next Event Estimation (NEE) Monte Carlo path tracer that will allow sampling separate components of illumination such as direct solar beams and diffuse scatterings independently. Overall, this approach provides curators with a non-destructive sandbox environment that enables instant dosimetric measurements without any drop in performance at approximately 60 fps rate.
+
+\section{Thesis Structure}
+Subsequently, the body of this paper is arranged in such a way that all the necessary information regarding ChronoLux will be delivered, from theory to experimental confirmation.
+
+In Chapter 2, the main goals of this study will be described, namely, both interactive goals and metrological ones. Chapter 3 represents an extended review of the bibliography and describes recent achievements in the areas of physical dosimetry, offline ray tracing, and hardware accelerated global illumination. Chapter 4 contains the analysis of the theory of light transport, including the explanation of Lambert's Cosine Law, and Monte Carlo integrals. Chapter 5 describes the process of creation of the Digital Twin and focuses on the Texture Space Ray Tracing algorithm, as well as Next Event Estimation kernel. In Chapter 6, the experimental validation and testing of the proposed framework is described in detail, including different conservation case studies and proving the mathematical consistency of the Monte Carlo convergence. In addition, Chapter 7 presents an elaborate user guide to using the software, and in Chapter 8 - conclusions and future perspectives are stated.
