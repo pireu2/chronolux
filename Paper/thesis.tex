@@ -1,11 +1,3 @@
-%%% File: thesis.tex, version 1.8, April 2025
-%%%
-%%% =============================================
-%%% This file contains a template that can be used with the package
-%%% cs.sty and LaTeX2e to produce a thesis that meets the requirements
-%%% of the Computer Science Department from the Technical University of Cluj-Napoca
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 \documentclass[12pt,a4paper,twoside]{report}
 \usepackage{cs}
 \usepackage[T1]{fontenc}
@@ -23,7 +15,34 @@
 \usepackage{graphics}
 \usepackage{ae,aecompl}
 \usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{listings}
 \usepackage{color}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+\lstset{style=mystyle}
 \usepackage{titlesec}
 \usepackage{fancyhdr}
 \usepackage{hyperref}
@@ -34,6 +53,9 @@
 \usepackage{enumitem}
 
 \setlist{noitemsep,nolistsep}
+
+\DeclareFontFamily{TS1}{aer}{}
+\DeclareFontShape{TS1}{aer}{m}{n}{<->ssub * cmr/m/n}{}
 
 \diplomathesis
 \centerchapter

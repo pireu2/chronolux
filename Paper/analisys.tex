@@ -1,58 +1,130 @@
-\chapter{Analysis and Theoretical Foundation}
-\label{ch:analysis}
+\chapter{Analysis and Theoretical Foundation}\label{ch:analysis}
 \pagestyle{fancy}
 
-{\color{blue}Together with the next two chapters takes about 70\% of the whole paper.\\}
+In this chapter, a clear definition of theoretical algorithms, mathematical abstractions, and overall logic behind the \textit{ChronoLux} design is attempted. Following the literature review, it becomes apparent that current methods of simulation suffer from significant shortcomings that render them unsuitable for application within interactive heritage metrology. Subsequently, in the following section, the theoretical measures suggested to tackle the aforementioned problems are outlined, focusing purely on abstract data manipulation and physics of light transfer.
 
-The purpose of this chapter is to explain the operating principles of the implemented
-application.
-Here you write about your solution from a theory standpoint – i.e. you explain it and demonstrate its theoretical properties/value, e.g.:
+\section{High-Level Theoretical Pipeline}\label{sec:theoretical_pipeline}
+The \textit{ChronoLux} pipeline is an endless sequence of mathematical computations that turns abstract three-dimensional data into radiometric energy build-up. From an architectural perspective, the \textit{ChronoLux} system can be broken down into three separate domains. These include the Initialization Domain, Radiometric Integration Domain, and Temporal Accumulation Domain. As described earlier in Figure~\ref{fig:concept_diagram}, \textit{ChronoLux} operates on a closed-loop basis, using time-discrete iterations for its operations.
+
+\subsection{The Initialization Domain}
+Before the execution of radiometry calculations, a physical definition of the virtual environment is required. This initialization starts from the import of geometrical mesh information. From the theoretical standpoint, each artifact consists of a discrete collection of interconnected triangles forming a manifold geometry. Each of these triangles is connected to physically realistic material behavior, described by the strictly conservative thermodynamic equation ($R + T + A = 1.0$) outlined in Chapter~\ref{ch:studiubib}.
+
+The geographical and temporal status of the simulation is established at the same time. According to the theoretical description, the coordinates of the geographic latitude ($\Phi$), geographic longitude ($\lambda$), geographic timezone offset, and the initial Julian Day of the physical heritage location are necessary inputs into the astronomy ephemeris calculation algorithm. After the completion of the first stage, a Bounding Volume Hierarchy (BVH) with a statistical optimization applied to the spatial information, as well as the solar zenith angle ($\theta_z$), and solar azimuth angle ($\gamma_s$) for the current temporal step ($t$) are derived. If the calculated solar zenith angle is less than zero ($\theta_z < 0$), then, due to the system's automatic culling mechanism, the radiometric calculation process does not have to be executed at all, moving to the next temporal iteration point.
+
+\subsection{The Radiometric Integration Domain}
+After both sets of parameters have been initialized, the system proceeds to the next stage, which is referred to as the Radiometric Integration Domain. This is where the primary mathematical algorithm for calculating irradiance takes place. Unlike in conventional rendering techniques, which use the projection of the view frustum onto the two-dimensional space, all computations take place in Texture Space, an idea that will be further explained in Section~\ref{sec:texture_space_paradigm}.
+
+In this domain, a computational solution is sought for the Rendering Equation at all acceptable points of the artifact's surface. Rays are propagated stochastically through the hemisphere to calculate both direct sunlight and diffuse ambient light using the technique of Next Event Estimation (NEE). Directions of escaping rays are compared to the Perez All-Weather Sky Model, allowing the system to receive exact spectral values of radiance. At the end of computations, a two-dimensional grid of data that corresponds to instantaneous physical irradiance (in Lux) is obtained.
+
+\subsection{The Temporal Accumulation Domain}
+The last theoretical step comprises the constant temporal summation of the irradiance values at each moment of time. Photochemical decomposition is always an accumulative process, so the calculated radiometric information will be reused rather than thrown out after one-time processing. In particular, the instantaneous illuminance (Lux) value is multiplied by the temporal duration of the current simulation step ($\Delta t$) to derive an accumulative dosage in Lux-Hours. The accumulative dosages will be added up using a persistent floating point array. After that, the temporal counter ($t = t + \Delta t$) is advanced, and the procedure is iterated until the end of the chosen period of time (e.g., meteorological year).
+
+\section{The Texture Space Ray Tracing Paradigm}\label{sec:texture_space_paradigm}
+The first major theory in which \textit{ChronoLux} deviates from regular computer graphics is that of using the Texture Space Ray Tracing method of computation. To illustrate why such a computational method is needed in science metrology, its advantages, as well as the mathematical limitations of conventional methods, will be demonstrated below.
+
+\subsection{The Mathematical Flaws of Screen Space Metrology}
+First, in a three-dimensional engine, there is always a virtual viewer defined by a set of parameters including a field of view, distance from the screen, and near/far planes. During rendering, a two-dimensional pixel grid is used. For each pixel, there is a ray traced from the camera's optical point through the pixel into three-dimensional space.
+
+Such an approach is mathematically exact, but it is flawed when we need to accumulate some radiation on all geometric surfaces. First, the problem is related to occlusion and perspective projection. When tracing rays from the virtual viewer, it becomes clear that the system will trace those rays that actually intersect the polygons. Any surface turned away from the viewer will not be computed because it simply will not be covered by any rays emanating from the viewer. It is obvious that if a statue is turned around the wrong way, no radiation can be accumulated on its posterior surface; the same holds true for other surfaces.
+
+\subsection{Texture Space Mapping}
+To accomplish a full separation between the simulation and the artificial restrictions of camera placement, \textit{ChronoLux} uses Texture Space Mapping. In 3D geometry, each vertex of the polygon corresponds to a point on the 2D UV plane through $(u, v)$ coordinates in three-dimensional geometry, which is called the UV map.
+
+The process of traversing the UV map in the \textit{ChronoLux} theory does not involve traversing the pixels on the computer screen but involves traversing the discrete texels on the UV map. This allows for the recreation of geometry in world space by calculating $P$ (position) and $N$ (surface normal).
+
+Let the UV map be a 2D matrix $M$ of size $W \times H$. For every element $M_{i,j}$:
+\begin{enumerate}
+    \item Read the pre-computed world-space position vector $P = (P_x, P_y, P_z)$ corresponding to the $(u, v)$ coordinate.
+    \item Read the pre-computed world-space normal vector $N = (N_x, N_y, N_z)$.
+    \item Use $P$ as the origin point for the dosimetric path tracer.
+    \item Use $N$ to orient the sampling hemisphere.
+\end{enumerate}
+
+This method ensures that each infinitesimally small patch of the surface of the object is evaluated simultaneously, without regard to the virtual camera orientation. Global consistency of the physical light transport throughout the entire structure of the heritage object is guaranteed.
+
+\section{Dosimetric Path Tracing Algorithm}\label{sec:dosimetric_algorithm}
+For the sake of simplicity, the origin ($P$) and the direction ($N$) of the rays as established using the Texture Space technique are known; hence, it is necessary to solve the global illumination equation in order to find the exact amount of energy hitting the particular point. This task can be accomplished using a highly efficient Monte Carlo algorithm with Next Event Estimation (NEE).
+
+\subsection{Stochastic Hemisphere Sampling and Energy Attenuation}
+Firstly, to find the total irradiance on a surface, the sampling directions have to be found, which involves generating directions distributed evenly over the upper hemisphere centered at the point where the sampling takes place. Within the framework of the Monte Carlo algorithm, such distribution of samples can be represented using a stochastic directional vector $\omega_i$.
+
+To improve convergence rates and minimize variance, \textit{ChronoLux} uses Cosine-Weighted Importance Sampling. Instead of uniformly sampling random vectors, the probability density function used here tilts towards the vertical axis that passes through the surface normal. This method mirrors the physics behind lambertian diffuse surfaces when light coming from the vicinity of the surface normal carries more energy (proportional to $\cos(\theta)$) than that coming in from a large angle $\theta$.
+
+As these stochastic rays traverse the digital scene, they interact with other surfaces. The core principle behind this interaction is energy absorption, meaning the photonic path will dissipate its energy after each encounter with another surface. Thus, an object placed in a room with dark mahogany walls (with high Absorptance, $A$) will reflect indirect rays with significantly less energy than those reflected from white plaster (high Reflectance, $R$).
+
+This effect can be easily modelled mathematically through the use of a throughput multiplier. Starting with an initial value of 1.0, which means perfect energy transmission, throughput gets multiplied by Reflectance $R$ at each encounter. As $R < 1.0$ for any physical surface (following the law of conservation of energy $R + T + A = 1.0$), the ray loses energy at an exponential rate after each reflection.
+
+In order to prevent simulation from becoming infinitely long, because of an endless number of bounces in enclosed space, a finite bounce depth limit should be set. For example, typical indirect path lengths do not exceed 3 or 4 bounces since additional reflections carry too little residual energy to matter further.
+
+\subsection{The Physics of Refractive Transmission}
+A basic element of heritage metrology involves evaluating the impact of external light that passes through physical obstacles, especially the effects of window glazing. This requires realistic modeling of refraction for light.
+
+When a path traced ray meets a boundary between two media (say, a pane of glass), the ray does not necessarily stop or bounce off. Rather, it changes direction based on the IORs of the two media (air-glass) according to Snell's Law:
+
+\begin{equation}
+    \frac{\sin \theta_1}{\sin \theta_2} = \frac{n_2}{n_1}
+\end{equation}
+In the above-mentioned framework, $n_1$ and $n_2$ stand for the refractive indices of the media from which the ray starts and where it reaches, respectively; while $\theta_1$ and $\theta_2$ stand for the angles of incidence and refraction, respectively, regarding the normal to the interface.
+
+As far as the \textit{ChronoLux} abstract model is concerned, the transmission vector is calculated via Snell's Law whenever the beam penetrates a transparent body, allowing the ray to proceed with its travel through the solid glass. At the same time, the throughput of the ray is adjusted with respect to the particular material's Transmittance ($T$) factor. If a conservator applies UV-blocking film with a Transmittance of 0.45, the ray throughput is immediately decreased by 55\%, thus providing an adequate simulation of the real-world effect produced by the intervention.
+
+\subsection{Next Event Estimation (NEE)}
+
+In a pure Monte Carlo path tracer, all sampling is random, and the tracing algorithm can use only random reflection from surfaces. The chance of finding the sun's small angular diameter through random reflections inside a dark museum is practically nil; therefore, there is significant variance in the simulation, and one would need to calculate millions of samples to converge toward the correct answer, rendering the calculation unfeasible at least with respect to the 8,760-hour simulation.
+
+To alleviate this problem, \textit{ChronoLux} employs the technique known as Next Event Estimation (NEE).
+
+At every single interaction point $P$ across the entire bounce sequence, the algorithm performs the following logic:
+\begin{enumerate}
+    \item \textbf{Direct Shadow Ray:} A deterministic vector $\omega_{sun}$ is generated with the direction towards the exact current location of the sun. "Shadow ray" tracing occurs along $\omega_{sun}$. If this ray leaves the bounded region without intersection with any opaque objects, the direct irradiance is calculated using the Perez model and added to the total dose. In case there is an intersection with a transparent object (such as window glass), the light intensity will be reduced by a factor of $T$ which is obtained using Snell's law.
+    \item \textbf{Indirect Bounce Ray:} At the same time, a stochastic vector $\omega_i$ is generated using Cosine-Weighted Importance Sampling. Tracing is performed along this vector to calculate the indirect light caused by reflection from walls and floors.
+\end{enumerate}
+
+Through its clear disentanglement of the deterministic solar irradiance and the random scattering of the ambient sky dome, NEE guarantees that the massive energy content of the sun is properly accounted for at every stage of the simulation, thus reducing the number of samples needed by many orders of magnitude and ensuring metrological stability. The total irradiance of the starting surface point is thus computed as the sum of all successful shadow rays cast from the initial surface point through multi-bounces.
+
+\subsection{Miss Evaluation and Perez Integration}
+The last piece of the integration domain puzzle is that of Miss evaluation. When the stochastic ray (be it the direct shadow ray or the indirect bounced ray) finally escapes the digital twin architecture, it will need to retrieve the radiance value from the physical world surrounding the building.
+
+Contrary to returning a hardcoded color, the escaping ray direction, $\omega_{escape}$, is mathematically inserted into the Perez All-Weather Sky Model function. This function calculates the elevation ($\theta_z$) and azimuth ($\gamma_s$) of $\omega_{escape}$ against the current solar location ($\theta_z$, $\gamma_s$) and uses the meteorological data of Clearness ($\epsilon$) and Brightness ($\Delta$) to calculate the physical luminance value of $\omega_{escape}$. If $\omega_{escape}$ happens to be near the solar disk, the result will undergo an exponential increase to simulate the Mie circumsolar scattering effect. Otherwise, if $\omega_{escape}$ is close to the horizon, then the Perez output transitions smoothly to simulate Rayleigh scattering.
+
+\section{The Parallel Determinism Problem}\label{sec:parallel_determinism}
+One of the problems that arises when moving from the abstract realm of mathematics into practical implementations in highly parallel architectures, such as today's GPUs, is non-determinism in floating-point additions.
+
+A typical parallel tracing algorithm traces hundreds of millions of rays independently using thousands of threads simultaneously. Once the rays finish traversing the scene, all threads attempt to write their irradiance into a shared matrix of accumulations $M$.
+
+As opposed to integer numbers, floating-point operations are non-associative, meaning that $(A + B) + C \neq A + (B + C)$ because of tiny differences that occur during precision rounds in IEEE 754. As a result, the final value of luminance will be different each time the algorithm runs if the order of writing to the accumulation matrix $M$ by the threads is random.
+
+In video games, this minute difference is not detectable. When applied to science, however, non-determinism becomes unacceptable since an analysis tool must return the same results every time a test simulation is conducted.
+
+The solution to the problem for the \textit{ChronoLux} framework involves making sure that ray tracing is done and accumulations happen in a predetermined manner, through mathematical structuring of geometry or seed points. This solution may add minimal computational expense, but it guarantees mathematical consistency and reproducibility.
+
+\section{Mathematical Dose Accumulation}\label{sec:dose_accumulation}
+The key theoretical objective of the \textit{ChronoLux} tool is not only creating a photographically accurate representation of light but rather finding the overall photochemical risk posed over a long period of time. It implies moving from considering an instantaneous value of illumination to a cumulative dosimetry one.
+
+\subsection{Temporal Integration Logic}
+Let $E_t(P)$ be the instantaneous physical irradiance (measured in Lux) estimated with the help of dosimetric path tracer on a particular surface point $P$ in a particular moment of time $t$.
+
+Light illumination in a physical museum is a continuous process, while a digital simulation has to discretize time into particular segments ($\Delta t$). The choice of $\Delta t$ significantly affects not only the accuracy of the calculation but also its performance. A traditional meteorological simulation usually takes 1 hour for each $\Delta t$. It allows tracking a motion of the Sun and cloud cover change in 8,760 steps within a typical year.
+
+Cumulative dose $D(P)$ delivered to a particular surface point $P$ for the whole period of time $T$ is theoretically equal to the following sum:
+
+\begin{equation}
+    D(P) = \sum_{t=0}^{T} E_t(P) \cdot \Delta t
+\end{equation}
+
+Where:
 \begin{itemize}
-    \item used or proposed algorithms,
-    \item used protocols,
-    \item  abstract models,
-    \item  logic explanations/arguments concerning the chosen solution,
-    \item  logic and functional structure of the application, etc.
+    \item $D(P)$ is the total accumulated exposure in Lux-Hours.
+    \item $E_t(P)$ is the calculated irradiance in Lux at time step $t$.
+    \item $\Delta t$ is the duration of the time step in hours.
 \end{itemize}
 
+\subsection{Floating-Point Precision and Heatmap Generation}
+In order to retain the accumulating radiation dosage $D(P)$, the program uses the previously discussed Texture Space $M$ matrix. Standard bitmap file formats (such as the 8-bit PNG or JPEG) cannot be used to store dosimetric data, as they can only store values from the set of integers ranging from 0 to 255. An extremely sensitive piece of art may amass as much as 50,000 Lux-Hours during its lifetime, which will quickly surpass the capacity of the 8-bit variable.
 
-~\\\parbox[c]{\textwidth}{\color{red}\bfseries
+Therefore, according to the theory, the system makes use of a 32-bit floating point data structure (RFloat). A 32-bit float can theoretically encode $3.4 \times 10^{38}$, providing practically infinite precision for unbounded accumulation.
 
-    YOU SHOULD NOT write about the implementation.
-    YOU SHOULD NOT describe technologies and other things which do not pertain to
-    your project (no fillers, please!).
-}
+As the simulation advances within the temporal dimension, the matrix elements continuously increase in value. The abstract mathematical information is then mapped to a heatmap for visual analytical representation of areas where photosensitivity risks are critical.
 
-
-\section{A section title}\label{sec:context}
-
-\subsection{A Subsection title}
-
-Every table in the thesis should be numbered as Table \textit{x.y}, where \textit{x} is the chapter number where the table is included, and \textit{y} is the number of the table within that chapter. There should be one empty line after the paragraph preceding the table, and one empty line after the table. Example: in this row we have inserted a reference to Table~\ref{tab:nonlin}.
-
-\begin{table}[ht]
-    \caption{Results} % table caption
-    \label{tab:nonlin} % \label{table:nonlin} introduces the label used to refer the table in the textt; reference is achieved via \ref{table:nonlin}
-    \centering                          % centered table
-    \begin{tabular}{|c|c|c|c|}          % 4 centerered columns
-        \hline
-        Case & Method\#1 & Method\#2 & Method\#3 \\ [0.5ex]   % heading
-        \hline                              % single horizontal line
-        1    & 50        & 837       & 970       \\               % table body
-        2    & 47        & 877       & 230       \\
-        3    & 31        & 25        & 415       \\[1ex]           % [1ex] adds vertical space
-        \hline
-    \end{tabular}
-
-\end{table}
-
-Every figure used in the thesis should be referred  (e.g. Figure x.y shows the components of the system...) and numbered.
-
-Numbering is like this: Figure \textit{x.y} where \textit{x} is the chapter number and \textit{y} is the number of the figure within that chapter. E.g. , in this row we have inserted a reference to Figure~\ref{fig:imag}.
-
-\begin{figure}[ht]
-    \centering
-    \caption{Figure name}
-    \label{fig:imag}
-\end{figure}
-
+\section{Conclusion}
+Thus, in conclusion, the theories described in the current chapter make \textit{ChronoLux} a purely metrological simulation software. Abandoning the bias-laden approach of the Screen Space rendering in favor of the Texture Space ray tracing method guarantees complete geometrical coverage. Furthermore, Next Event Estimation, together with the Perez Sky Model algorithm, ensures exact computation of the light transport. Finally, accumulating irradiation in an arbitrarily precise floating point matrix allows for accurate simulation of photochemical degradation for meteorological years.

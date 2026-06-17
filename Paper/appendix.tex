@@ -1,32 +1,225 @@
-\appendix
-\chapter{Relevant Code sections}
-\pagestyle{fancy}
+\chapter{Appendix}
 
-\begin{verbatim}
- /** Maps are easy to use in Scala. */
-object Maps {
-  val colors = Map("red" -> 0xFF0000,
-                   "turquoise" -> 0x00FFFF,
-                   "black" -> 0x000000,
-                   "orange" -> 0xFF8040,
-                   "brown" -> 0x804000)
-  def main(args: Array[String]) {
-    for (name <- args) println(
-      colors.get(name) match {
-        case Some(code) =>
-          name + " has code: " + code
-        case None =>
-          "Unknown color: " + name
-      }
-    )
-  }
+\section{Core HLSL Path Tracing Implementation}
+\label{apx:pathtracer_code}
+
+The following code details the exact DirectX Raytracing implementation used within \textit{ChronoLux} to evaluate the dosimetric simulation. The integration is explicitly split into direct sun evaluation and a secondary stochastic multi-sampling loop for indirect ambient bouncing.
+
+\begin{lstlisting}[language=C++, caption={IrradianceBake.raytrace: The primary ray generation kernel mapping Target Mesh UVs to stochastic integration over the hemisphere.}, label={lst:raygen}]
+[shader("raygeneration")]
+void IrradianceBakeRayGen()
+{
+    uint2 id = DispatchRaysIndex().xy;
+    uint2 dims = DispatchRaysDimensions().xy;
+    float4 bakedPos = _PositionMap[id];
+    float4 bakedNormal = _NormalMap[id];
+    
+    if (bakedPos.w < 0.01 || length(bakedNormal.xyz) < 0.1) return;
+    
+    float3 origin = bakedPos.xyz;
+    float3 normal = normalize(bakedNormal.xyz);
+    
+    uint baseSeed = Hash(id.y * dims.x + id.x + _FrameIndex);
+    float totalIrradiance = 0.0;
+    float nDotSun = dot(normal, _SunDirection);
+
+    // 1. Direct Sun
+    float directIrradiance = 0.0;
+    if (nDotSun > 0.0)
+    {
+        uint sunSeed = baseSeed;
+        directIrradiance = TracePath(origin, _SunDirection, normal, sunSeed, true, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux) * nDotSun;
+        totalIrradiance += directIrradiance;
+    }
+
+    // 2. Stochastic Multi-Sampling
+    float indirectIrradiance = 0.0;
+    uint numSamples = max(1, _SamplesPerPixel);
+    for (uint i = 0; i < numSamples; i++)
+    {
+        uint sampleSeed = Hash(baseSeed + i);
+        float3 randomDir = GetCosineWeightedDirection(normal, sampleSeed, PI);
+        indirectIrradiance += TracePath(origin, randomDir, normal, sampleSeed, false, _SceneRTAS, _SunDirection, _BeamLux, _DiffuseLux);
+    }
+    
+    float avgIndirect = (indirectIrradiance / (float)numSamples) * PI;
+    totalIrradiance += avgIndirect;
+
+    _DoseMap[id] += (totalIrradiance * _DeltaHours);
+    _DirectDoseMap[id] += (directIrradiance * _DeltaHours);
+    _IndirectDoseMap[id] += (avgIndirect * _DeltaHours);
 }
-\end{verbatim}
+\end{lstlisting}
 
-\chapter{Other Relevant Info}
+\begin{lstlisting}[language=C++, caption={PathTracer.hlsl: The core recursive path tracing loop evaluating Russian Roulette absorption and transparent geometric traversal.}, label={lst:pathtracer}]
+float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uint seed, bool isDirectSun, RaytracingAccelerationStructure rtas, float3 sunDir, float beamLux, float diffuseLux)
+{
+    float throughput = 1.0;
+    float3 currentOrigin = origin + surfaceNormal * RAY_BIAS;
+    float3 currentDir = direction;
 
-Proofs etc. if any. Otherwise remove this chapter
+    [loop]
+    for (uint bounce = 0; bounce < MAX_BOUNCES; bounce++)
+    {
+        RayDesc ray;
+        ray.Origin = currentOrigin;
+        ray.Direction = currentDir;
+        ray.TMin = 0.001;
+        ray.TMax = 10000.0;
 
-\chapter{Published Papers}
+        Payload payload;
+        payload.isOccluded = 1;
+        payload.reflectance = 0.0;
+        payload.transmittance = 0.0;
+        payload.hitDistance = 0.0;
+        payload.worldNormal = float3(0, 1, 0);
 
-If any. Otherwise remove this chapter
+        uint rayFlags = RAY_FLAG_FORCE_OPAQUE;
+        if (isDirectSun) rayFlags |= RAY_FLAG_CULL_BACK_FACING_TRIANGLES;
+        
+        TraceRay(rtas, rayFlags, 0xFF, 0, 1, 0, ray, payload);
+
+        if (payload.isOccluded == 0)
+        {
+            return EvaluateSky(currentDir, sunDir, beamLux, diffuseLux, isDirectSun) * throughput;
+        }
+
+        if (isDirectSun)
+        {
+            float trans = saturate(payload.transmittance);
+            if (trans <= 0.0) return 0.0; // Blocked by opaque geometry
+            
+            throughput *= trans;
+            // Use a larger bias to guarantee escaping the pane geometry, especially at grazing angles
+            currentOrigin += currentDir * (payload.hitDistance + RAY_BIAS * 5.0);
+            continue;
+        }
+
+        // Probabilistic event selection (Russian Roulette)
+        float rv = Random(seed);
+        float refl = saturate(payload.reflectance);
+        float trans = saturate(payload.transmittance);
+        
+        if (rv < refl)
+        {
+            float3 hitPoint = currentOrigin + currentDir * payload.hitDistance;
+            currentDir = GetCosineWeightedDirection(payload.worldNormal, seed, PI);
+            currentOrigin = hitPoint + payload.worldNormal * RAY_BIAS;
+        }
+        else if (rv < refl + trans)
+        {
+            currentOrigin += currentDir * (payload.hitDistance + RAY_BIAS);
+        }
+        else
+        {
+            return 0.0;
+        }
+
+        if (throughput <= MIN_VISIBILITY) break;
+    }
+    return 0.0;
+}
+\end{lstlisting}
+
+\section{C\# Orchestrator Implementations}
+\label{apx:csharp_code}
+
+The following code snippets detail the core C\# CPU orchestration logic. Listing \ref{lst:timeloop} demonstrates the dynamic chronological time-stepping Coroutine used to drive the simulation safely across the OS thread schedules.
+
+\begin{lstlisting}[language={[Sharp]C}, caption={LightDoseSimulator.cs: The Coroutine driving dynamic time-stepping, asynchronous telemetry extraction, and synchronous EXR flushing.}, label={lst:timeloop}]
+private IEnumerator RunSimulationInternal() {
+    float deltaHours = stepSeconds / 3600f;
+    int totalDays = endDay - startDay + 1;
+    int currentDayIdx = 0;
+
+    string exportDir = Path.Combine(Application.dataPath, "../Exports", DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+    Directory.CreateDirectory(exportDir);
+
+    for (int day = startDay; day <= endDay; day++) {
+        DateTime date = new DateTime(year, 1, 1).AddDays(day - 1);
+        currentDayIdx++;
+        
+        DateTime sunrise = SunCalculator.FindSunrise(date, latitude, longitude, utcOffset);
+        DateTime sunset = SunCalculator.FindSunset(date, latitude, longitude, utcOffset);
+        
+        if (sunrise == date && sunset == date) continue; // Polar night fallback
+        
+        for (DateTime localTime = sunrise; localTime < sunset; localTime = localTime.AddSeconds(stepSeconds)) {
+            if (!_isSimulating) yield break;
+            
+            ApplySunPosition(localTime);
+            
+            // Optimization: Skip exact sunrise/sunset steps where there is functionally no light
+            if (CurrentBeamLux < 0.1f && CurrentDiffuseLux < 0.1f) {
+                continue;
+            }
+
+            // Dispatch hardware raytracing for this specific hour
+            irradianceBaker.DispatchRays(CurrentSunDirection, CurrentBeamLux, CurrentDiffuseLux, deltaHours, samplesPerPixel, baker.PositionMap, baker.NormalMap);
+            completedSteps++;
+            currentProgress = ((float)currentDayIdx / totalDays) * 100f;
+            
+            // Extract telemetry data for the CSV asynchronously
+            TakeAsyncSnapshot(day, localTime.ToString("yyyy-MM-dd HH:mm"), currentAltitude, currentAzimuth, CurrentBeamLux, CurrentDiffuseLux);
+
+            if (completedSteps % 10 == 0) { 
+                ApplyDosePreview(); 
+            }
+            // Yield execution back to the OS and Unity Main Thread to maintain interactivity
+            yield return null;
+        }
+        
+        // Flush the daily accumulation map to disk as a floating-point EXR
+        ExportDailyMap(exportDir, day);
+    }
+}
+\end{lstlisting}
+
+Listing \ref{lst:objloader} showcases the background threaded parser utilized to load massively dense geometric heritage assets natively at runtime.
+
+\begin{lstlisting}[language={[Sharp]C}, caption={RuntimeModelLoader.cs: Multi-threaded `.obj` chunk parsing avoiding main-thread freezes, followed by strict spatial normalization constraints.}, label={lst:objloader}]
+string path = Path.Combine(ProjectManager.ModelFolder, artifactFile);
+UpdateProgress(0.1f, $"Loading artifact: {artifactFile}");
+
+// 1. Offload heavy string parsing to a background CPU thread
+var parseTask = Task.Run(() => {
+    if (!File.Exists(path)) return null;
+    return SimpleObjLoader.ParseObj(File.ReadAllText(path));
+});
+
+// 2. Yield the main thread to keep the "LOADING ASSETS" UI animation smooth
+while (!parseTask.IsCompleted) {
+    UpdateProgress(0.1f, "Parsing artifact geometry...");
+    yield return null;
+}
+
+if (parseTask.IsCompletedSuccessfully && parseTask.Result != null && parseTask.Result.Count > 0) {
+    var dataList = parseTask.Result;
+    _artifactInstance = new GameObject(Path.GetFileNameWithoutExtension(artifactFile));
+    
+    if (_artifactInstance != null) {
+        _artifactInstance.transform.SetParent(modelRoot);
+        _artifactInstance.transform.localPosition = Vector3.zero;
+        _artifactInstance.transform.localScale = Vector3.one;
+
+        // 3. Assemble the hierarchy on the main thread
+        foreach (var data in dataList) {
+            GameObject child = CreateGameObjectFromData(data, artifactMaterial);
+            if (child == null) continue;
+            child.transform.SetParent(_artifactInstance.transform, false);
+            child.transform.localPosition = Vector3.zero;
+            SetupArtifactPart(child, project); 
+        }
+
+        SetupArtifactRoot(_artifactInstance);
+        
+        // 4. Normalize the raw mesh geometry (Centering + Scaling children to a 2m box)
+        CenterAndScaleModel(_artifactInstance, 2.0f);
+
+        // 5. Apply user-defined transformations on the root
+        _artifactInstance.transform.localPosition = project.artifactPosition;
+        if (project.artifactScale != Vector3.zero) 
+            _artifactInstance.transform.localScale = project.artifactScale;
+    }
+}
+\end{lstlisting}
