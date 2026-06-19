@@ -1,15 +1,123 @@
-\chapter{User’s Manual}
-\pagestyle{fancy}
+\chapter{User's Manual}
 
-In the section describing the installation procedure you should detail the hardware and
-software resources needed for installing and running the application, and a step by step
-description of how your application can be deployed/installed. An administrator should be able
-to perform the installation/deployment based on your instructions.
+\section{Introduction}
 
+The \textit{ChronoLux} Digital Twin is designed as a standalone, high-performance desktop application. It integrates a real-time 3D viewport with a comprehensive analytical dashboard, empowering conservators and metrologists to simulate, visualize, and quantify cumulative light stress on cultural heritage assets. This chapter provides a detailed, step-by-step guide to installing the software, navigating the virtual laboratory, configuring simulation parameters, and exporting scientifically valid dosimetry data.
 
-In the section for the user you should describe how to use the application from the point
-of view of a user with no inside technical information; this should be adorned with screen shots
-and a stepwise explanation of the interaction. Based on user's manual, a person should be able
-to install and use your product.
+\section{Installation and System Requirements}
 
-{\noindent\color{blue}Should take 1 to 5 pages.\\}
+Because \textit{ChronoLux} relies on hardware-accelerated DirectX 12 compute shaders for Texture Space Ray Tracing, it requires a modern workstation capable of handling high-density parallel workloads.
+
+\subsection{Hardware Prerequisites}
+\begin{itemize}
+    \item \textbf{GPU:} NVIDIA GeForce RTX 30-series or 40-series (RTX 4070 Ti Super or higher recommended) with full DXR (DirectX Raytracing) support.
+    \item \textbf{CPU:} A multi-core processor (e.g., AMD Ryzen 7 7800X3D) to handle the asynchronous telemetry extraction without stalling the GPU.
+    \item \textbf{RAM:} Minimum 16 GB, recommended 32 GB DDR5 for caching high-resolution floating-point render textures.
+    \item \textbf{Storage:} SSD storage for fast retrieval of the 2K and 4K uncompressed texture atlases.
+\end{itemize}
+
+\subsection{Software Installation and Artifact Import}
+The application is distributed as a pre-compiled Unity executable. No additional dependencies or external runtimes are required beyond standard Windows 10/11 drivers.
+
+A critical feature of the \textit{ChronoLux} framework is its robust asset pipeline. The environment is not restricted to a single monolithic mesh. The user can import complex environments comprising multiple disparate objects (e.g., distinct walls, windows, floors, pedestals, and target artifacts). This allows for granular material assignment and precise architectural modeling, enabling the software to calculate exact geometric occlusions and secondary light bounces across multiple surfaces independently.
+
+\section{The Project Launcher Dashboard}
+
+Upon launching the executable, the user is greeted by the Project Launcher Dashboard. This interface manages the multi-project ecosystem, ensuring that different museum wings, artifacts, or hypothetical conservation scenarios can be saved and loaded independently.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.75\columnwidth]{fig_launcher_dashboard.png}}
+    \caption{The Project Launcher Dashboard, allowing for the creation and management of independent simulation profiles via JSON persistence.}
+    \label{fig:user_launcher}
+\end{figure}
+
+As shown in Figure \ref{fig:user_launcher}, the launcher lists all previously created projects. Project states are persistently serialized into JSON files stored within the local application directory. This persistence guarantees that all material assignments, artifact transformations, and geographic coordinates are perfectly retained across sessions. To begin, the user may select an existing profile or instantiate a new simulation environment.
+
+\section{Viewport Navigation and Interaction}
+
+Entering a project loads the 3D Virtual Laboratory. The user interface within the laboratory is divided into the central 3D viewport and the surrounding analytical UXML panels.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig_viewport_navigation.png}}
+    \caption{The main 3D viewport showcasing the target artifact and the central crosshair used for the \texttt{ObjectPicker} interaction system.}
+    \label{fig:user_viewport}
+\end{figure}
+
+Navigation is handled via the \texttt{FreeLookCamera} system. To look around the environment, the user must click and drag the mouse within the viewport area. Movement is achieved using the standard \texttt{W, A, S, D} keyboard configuration.
+For rapid traversal of large architectural spaces, holding the \texttt{Shift} key activates a 10x velocity multiplier.
+
+At the center of the screen, a precise crosshair facilitates the \texttt{ObjectPicker} raycast system. Aligning the crosshair with any sub-mesh in the environment and clicking will select that specific object, opening its parameters in the right-hand Material Configuration panel. The cursor lock can be dynamically toggled at any time by pressing the \texttt{ESC} key, freeing the mouse to interact with the surrounding sliders and buttons.
+
+\section{The Laboratory HUD and Telemetry}
+
+The left side of the screen houses the live telemetry and transformation Heads-Up Display (HUD). This panel provides real-time feedback on both the spatial configuration of the selected artifact and the ongoing radiometric calculations.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig_hud_telemetry.png}}
+    \caption{The Laboratory HUD displaying real-time transformation controls, astrometric telemetry, Monte Carlo variance tracking, and the dynamic hourly radiation waveform.}
+    \label{fig:user_hud}
+\end{figure}
+
+As illustrated in Figure \ref{fig:user_hud}, the HUD contains several critical subsystems:
+\begin{itemize}
+    \item \textbf{Transformation Controls:} Granular input fields allowing the user to precisely override the Position, Rotation, and Scale of the selected object.
+    \item \textbf{Material Properties:} Direct readout of the selected object's assigned physical properties.
+    \item \textbf{Astrometric Telemetry:} Live updates of the Solar Altitude and Azimuth angles based on the active Julian Day.
+    \item \textbf{Dosimetry Metrics:} Continuous tracking of the Peak Dose (maximum hotspot accumulation) and the average dose across the mesh.
+    \item \textbf{Scientific Validation:} A real-time readout of the virtual sensor error (variance), confirming the stability of the Monte Carlo integration.
+    \item \textbf{Radiation Waveform Graph:} A dynamic, scrolling waveform visualization that plots the intensity of the light radiation per hour, instantly reflecting diurnal spikes during solar noon.
+    \item \textbf{Data Export:} A dedicated button for triggering the asynchronous export of the simulation data to a CSV file.
+\end{itemize}
+
+\section{Material Configuration and Catalog}
+
+Selecting any object in the viewport via the crosshair activates the Material Configuration catalog on the right-hand side of the interface. This catalog is crucial for setting up the preventive conservation scenarios (e.g., swapping clear glass for UV-tinted glass).
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.8\columnwidth]{fig_material_catalog.png}}
+    \caption{The Material Catalog interface, featuring real-time Reflectance and Transmittance sliders and the scientific CC0 texture library.}
+    \label{fig:user_material}
+\end{figure}
+
+The interface (Figure \ref{fig:user_material}) provides intuitive, live-updating sliders to adjust the Reflectance ($R$) and Transmittance ($T$) coefficients of the selected mesh. A strict energy conservation clamp ensures that $R + T \le 1.0$, preventing the creation of physically impossible materials.
+
+Additionally, the catalog features a built-in library of scientifically validated CC0 PBR (Physically Based Rendering) textures. The user can visually identify and apply high-fidelity textures such as Brick, Clear Glass, Mirror, Plaster, Hardwood, Carpet, and Grass by clicking the corresponding preview buttons. These textures are immediately mapped to the object's UV space, instantly updating its interaction with the Monte Carlo light rays.
+
+\section{Simulation Configuration and Execution}
+
+Once the environment geometry and materials are properly configured, the user must initialize the time-stepping simulation loop. This is managed via the Simulation Configuration panel.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig_simulation_configuration.png}}
+    \caption{The Simulation Configuration panel managing the orchestration of the 8,760-hour loop, featuring execution controls, a progression bar, and a daily accumulation slider.}
+    \label{fig:user_sim_config}
+\end{figure}
+
+The Simulation Configuration panel (Figure \ref{fig:user_sim_config}) provides complete control over the temporal execution of the Digital Twin:
+\begin{itemize}
+    \item \textbf{Execution Controls:} Dedicated buttons to \texttt{Start}, \texttt{Bake}, or \texttt{Stop} the simulation. The \texttt{Clear Map} button flushes the GPU VRAM accumulation buffers, resetting the dose to zero.
+    \item \textbf{Progression Bar:} A visual loading bar that tracks the progression of the simulation through the 8,760 hours of the meteorological year.
+    \item \textbf{Daily Accumulation Slider:} An interactive time slider that allows the user to manually scrub through the simulation, visualizing the accumulation of dose on a per-day basis, providing a granular look at the temporal stress distribution.
+\end{itemize}
+
+\section{Heatmap Visualization and Data Export}
+
+As the simulation progresses or after it successfully completes the full year cycle, the analytical data must be visualized and exported.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.8\columnwidth]{fig_heatmap_visualisation.png}}
+    \caption{The false-color "Inferno" heatmap visualization mapping peak light stress directly onto the artifact's 3D geometry in real-time.}
+    \label{fig:user_heatmap}
+\end{figure}
+
+\subsection{Viewport Heatmap}
+The engine features a sophisticated false-color heatmap shader, mapped directly onto the geometry of the target artifact (Figure \ref{fig:user_heatmap}). Using a high-contrast "Inferno" palette (transitioning from deep purple through red to bright yellow), it visually isolates the spatial hotspots receiving the highest dose. This allows conservators to intuitively understand which physical areas of the object are at maximum risk without having to read raw numeric data.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.7\columnwidth]{fig_csv_export.png}}
+    \caption{The generated headless export outputs, including the \texttt{SimulationMetrics.csv} file for external graphing and the EXR snapshots.}
+    \label{fig:user_csv}
+\end{figure}
+
+\subsection{Headless Telemetry Export}
+For rigorous academic and metrological analysis, visual heatmaps are insufficient. By utilizing the export functionality (Figure \ref{fig:user_csv}), the asynchronous C\# orchestration thread writes the entire year's worth of accumulated data to a robust CSV log file. This file contains the hourly breakdowns of Altitude, Azimuth, Peak Dose, Average Dose, and Spatial Variance. Simultaneously, high dynamic range EXR image snapshots of the accumulation buffers are exported. These standardized formats ensure that the raw scientific data generated by \textit{ChronoLux} can be natively imported into external tools like Microsoft Excel, Python, or MATLAB for further graphing, comparative study, and publication formatting.

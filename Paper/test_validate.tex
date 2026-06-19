@@ -1,5 +1,245 @@
 \chapter{Testing and Validation}
 \pagestyle{fancy}
 
-{\noindent\color{blue}Together with the previous two chapters should take about 70\% of the paper.}
+\section{Introduction to the Metrological Validation Framework}
 
+The transition from the pure computer graphics application to the scientifically justified Digital Twin requires a meticulous and exhaustive testing and validation process. Regarding the particular case of the \textit{ChronoLux} engine, the validation should go beyond the subjective evaluation of the visual quality of the image and frame rates. The validation will focus on the integrity of radiometric light transport equations, the correctness of the calculations of solar ephemeris, and the stability of the Monte Carlo path tracing algorithm in extended 8,760-hour cycles.
+
+This chapter offers a detailed empirical validation of the \textit{ChronoLux} framework by means of a series of precisely defined cases. The goals are twofold: to illustrate the practical use of the software in the conservation scenarios; to prove mathematically the stability of the DirectX 12 compute shaders and C\# orchestration in terms of the dosimetry data consistency.
+
+The validation will be performed across four distinct conservation scenarios (A to D). They will allow isolating specific variables in the rendering equation like the geometric occlusion, the transparency, and albedo of material. In addition, there will be a special scientific validation case, which will monitor the spatial variance and the standard error of the mean (SEM) of the Monte Carlo integration.
+
+\section{Experimental Setup and Simulation Parameters}
+
+\subsection{The Virtual Environment and Target Artifact}
+
+For empirical testing of the ability of the engine to quantify the cumulative light stress, a very detailed 3D geometric mesh is required. Stanford Bunny has been selected as the target artifact of these simulations. It has been re-topped and UV-mapped with a high-resolution 2K texture coordinate space (2048 $\times$ 2048). It is crucial due to the test of the Texture Space Ray Tracing paradigm, which forces the engine to launch more than 4.1 million (one per each UV texel) compute threads every frame.
+
+The virtual museum has been built as a standard rectangular architectural space with a large window on the southern wall for sufficient solar penetration during daytime. The artifact is located on a pedestal inside this room.
+
+\subsection{Meteorological and Astrometric Configuration}
+
+The experiment has been performed in the setting of the execution of one full meteorological year of 8,760 solar hours. The geographical parameters were set to Latitude $44.427^\circ$ N and Longitude $26.103^\circ$ E, Bucharest, Romania. The selection of these coordinates allows getting a wide variation of the solar altitude in order to get maximum solar penetration in winter and minimum depth in summer.
+
+Solar coordinates (Altitude and Azimuth) for each of the 8,760 hours have been calculated dynamically by the CPU using the \texttt{SunCalculator.cs} module. It is important to note that the mathematical correctness of these computations is crucial for the rendering equation because the direct illumination component depends on the accurate solar incident angle. The fundamental logic of the calculations lies in finding the solar declination ($\delta$) and hour angle ($\omega$) according to the Julian Day.
+
+\begin{lstlisting}[language=C, caption={Astrometric solar elevation calculation executed by the CPU orchestrator.}, label={lst:sun_calc}]
+double declination = 0.409 * Math.Sin((2.0 * Math.PI / 365.0) * (julianDay - 1.39));
+double hourAngle = (Math.PI / 12.0) * (solarTime - 12.0);
+
+double elevationRad = Math.Asin(Math.Sin(latitudeRad) * Math.Sin(declination) +
+                                Math.Cos(latitudeRad) * Math.Cos(declination) * Math.Cos(hourAngle));
+double elevationDeg = elevationRad * (180.0 / Math.PI);
+\end{lstlisting}
+
+As you see, the obtained \texttt{elevationDeg} and corresponding Azimuth are transferred to the DirectX 12 compute shader via the constant buffer every frame in order to define the origin vector for the shadow rays.
+
+\subsection{Atmospheric Modeling via the Perez Model}
+
+Ambient skylight, which defines the indirect dose on the artifact, has been modeled by the Perez All-Weather Sky Model. In this stress testing validation, the atmosphere has been kept static with the clearness index ($T$) of 2.0, which means the completely clear sky. Although the real-life weather can include overcast, thus reducing irradiance, keeping it always clear constitutes an absolute worst case scenario. If the conservation strategy works in a year of constantly clear skies, it guarantees its effectiveness under the real life varying weather conditions.
+
+\subsection{Hardware and Execution Profiling}
+
+Simulations have been performed using a powerful PC with the NVIDIA GeForce RTX 4070 Ti Super GPU, AMD Ryzen 7 7800X3D CPU, and 32 GB of DDR5 6000 MT/s RAM. The hardware-accelerated DXR pipeline has been configured to emit 64 Monte Carlo rays per each UV texel per hourly frame. Despite the huge amount of computations (268 million rays per frame), the completely decoupled Texture Space architecture keeps a stable 60 FPS viewport, while the background C\# telemetry thread asynchronously extracts floating-point accumulation buffers to the \texttt{SimulationMetrics.csv} file.
+
+\section{Data Telemetry and the Simulation Output}
+
+\subsection{Downsampled Dosemap and GPU Readback}
+
+The extraction of radiometric data for each hour in the simulation of 8,760 hours poses a notable computational challenge. Extracting raw 2K resolution (2048 $\times$ 2048) floating-point accumulation buffers directly from VRAM to the CPU side will saturate the PCI express bus and will heavily reduce the framerate. Therefore, in order to optimize the process, the \textit{ChronoLux} engine employs the downsample architecture. The high-resolution \texttt{\_DirectDoseMap} and \texttt{\_IndirectDoseMap} buffers have been blitted into lower-resolution \texttt{\_downsampleRT} render textures. Then, the \texttt{AsyncGPUReadback} API is used only on the downsampled maps to get a statistical representative yet light matrix of the dose distribution to the CPU telemetry thread without stopping the main 60 FPS rendering loop.
+
+\subsection{The Telemetry CSV Format}
+
+The \textit{ChronoLux} engine progresses through the year and logs downsampled buffer data to the comma-separated values (CSV) log file every simulation tick. This CSV will be the dataset for all further empirical analysis and graph generation.
+
+Table \ref{tab:csv_sample} illustrates sample telemetry data logged during Scenario A, alongside the mathematical derivation of each field.
+
+\begin{table}[htbp]
+    \centering
+    \small
+    \caption{Sample telemetry data logged continuously during the simulation.}
+    \label{tab:csv_sample}
+    \begin{tabular}{l c c c c c c c}
+        \hline
+        \textbf{Time} & \textbf{Altitude} & \textbf{Azimuth} & \textbf{DeltaMax} & \textbf{DeltaAvg} & \textbf{MaxDose} & \textbf{AvgDose} & \textbf{Variance} \\
+        \hline
+        Jan 01 09:27  & $4.31^\circ$      & $128.50^\circ$   & 151.15            & 42.56             & 151.15           & 42.56            & 900.68            \\
+        Jan 01 09:57  & $8.33^\circ$      & $134.14^\circ$   & 276.93            & 69.90             & 409.00           & 112.46           & 2448.91           \\
+        Jan 01 10:27  & $11.98^\circ$     & $140.10^\circ$   & 344.27            & 88.49             & 683.03           & 200.96           & 3911.17           \\
+        Jan 01 10:57  & $15.18^\circ$     & $146.38^\circ$   & 398.31            & 101.83            & 1010.57          & 302.80           & 5208.42           \\
+        \hline
+    \end{tabular}
+\end{table}
+
+The metrics being logged in the CSV are defined as follows:
+\begin{itemize}
+    \item \textbf{Altitude / Azimuth}: the astrometric coordinates of the solar disc calculated for the current Julian Day.
+    \item \textbf{DeltaMax / DeltaAvg}: the light energy (in Lux-Hours) accumulated \textit{only} during the current time step, isolating the instantaneous hourly stress.
+    \item \textbf{MaxDose / AvgDose}: the running cumulative total of light energy throughout the whole simulation history. \texttt{MaxDose} refers to the single highest texel (hotspot), while \texttt{AvgDose} refers to the mean value on the valid surface area.
+    \item \textbf{Variance ($\sigma^2$)}: the spatial variance of the downsampled light distribution to mathematically prove the physical difference between shadowed and exposed areas as the light accumulates.
+\end{itemize}
+
+Relying on the mentioned exhaustive and continuous logging system rather than on the static snapshots allows conservators to trace the exact moments of the peak stress and correlate them with seasonal and diurnal changes.
+
+\section{Overview of Conservation Scenarios}
+
+Before proceeding to the empirical findings, four distinct conservation scenarios (A to D) will be described, constituting the core of this validation. The gradual introduction of different geometric and material interventions will be tested here. Scenario A is the baseline untreated museum environment with the artifact fully exposed to the clear southern window and highly reflective architectural materials. Scenario B focuses on the material filtration by introducing the UV-blocking conservation glass and matte flooring while keeping the highly exposed position of the artifact. Scenario C does the opposite thing: it examines purely geometric occlusion, moving the artifact to the deeply shaded corner while reverting materials to the highly reflective baseline. Scenario D combines the corner occlusion and the protection of tinted glass and matte flooring. Further sections will analyze the telemetry data and the physical light transport mechanisms of each scenario separately.
+
+\section{Scenario A: The Baseline Exposure}
+
+\subsection{Configuration and Untreated Conditions}
+
+Scenario A is the experimental control, which defines the baseline light exposure of the artifact in the untreated museum environment. The goal is to quantify the photodegradation potential of this exposure without the conservation interventions.
+
+Architectural materials inside the UXML interface have been configured to represent highly reflective raw building materials. The floor had the high Lambertian albedo of $R = 0.50$, meaning the polished light-colored surface, which maximizes the indirect light diffusion. The southern window has been modeled with a standard clear glass material (Transmittance $T = 0.84$ and Reflectance $R = 0.08$), letting 84\% of direct solar energy pass without attenuation. The artifact has been positioned in the path of the window for maximum exposure.
+
+\subsection{Empirical Analysis of the Catastrophic Dose}
+
+The simulations have been started in \textit{ChronoLux} engine, accumulating 8,760 hours of the 2026 meteorological year. Extraction of telemetry data from the \texttt{\_DirectDoseMap} and \texttt{\_IndirectDoseMap} GPU buffers has shown a catastrophic light stress.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig1a_cumulative_max_dose.png}}
+    \caption{CIE Light Dosimetry results for Scenario A reveal cumulative light stress exposure over 8760 hours resulting in a large peak light dose of 6.6M Lux-Hours far greater than the maximum recommended light stress of 50,000 Lux-Hours.}
+    \label{fig:scenario_a_max}
+\end{figure}
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig1b_cumulative_avg_dose.png}}
+    \caption{CIE Light Dosimetry results for Scenario A showing cumulative average dose over the 8760 hours. The exponential growth curve illustrates the unmitigated accumulation of energy.}
+    \label{fig:scenario_a_avg}
+\end{figure}
+
+Figures \ref{fig:scenario_a_max} and \ref{fig:scenario_a_avg} illustrating cumulative dose metrics show a peak cumulative light dose of $6.6 \times 10^6$ Lux-Hours, largely exceeding the CIE upper recommendation of 50,000 Lux-Hours per year for highly sensitive materials. The average cumulative dose across the entire surface of the artifact has also demonstrated unsustainable exponential growth, which confirms the existence of the photodegradation risk across the asset.
+
+\subsection{Diurnal Fluctuation and Hourly Stress}
+
+In order to explain the mechanisms of this energy accumulation, diurnal and seasonal irradiance fluctuations have been analyzed using the diurnal heatmap.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig4_diurnal_heatmap.png}}
+    \caption{A heat map of diurnal exposure illustrates hourly exposure levels in a 365-day cycle, displaying high frequency peaks corresponding to solar noon hours and seasonal solar elevation changes.}
+    \label{fig:scenario_a_diurnal}
+\end{figure}
+
+Figure \ref{fig:scenario_a_diurnal} represents the heatmap of hourly exposure in a 365-day cycle, showcasing the high-frequency peaks near the solar noon and seasonal elevation changes.
+
+It is governed by the solar elevation: in winter, the sun goes much lower on the horizon, which allows the direct sunlight vectors to penetrate deeper via the southern window and hit the artifact. In summer, the high position of the sun leads to the indirect dosing, which dominates due to the floor reflection, but the winter dominance is evident in total accumulation.
+
+\section{Scenario B: Material Intervention}
+
+\subsection{Simulating Physical Filtration}
+
+Expanding upon Scenario A, Scenario B tests the influence of the material interventions while keeping the position of the artifact the same. The clear window glass is being replaced with the UV-blocking conservation tinted glass (Transmittance $T = 0.45$ and Reflectance $R = 0.12$), while the floor material is changed to the dark matte with the albedo $R = 0.15$.
+
+\subsection{The Physics of Ray Attenuation}
+
+The mentioned change of materials substantially affects the Monte Carlo path tracing in the DirectX 12 compute shader. Shadow rays toward the solar disc to calculate the direct dose $E_{dir}$ traverse the BVH and intersect the window geometry. Since the window is transmissive, the ray energy is multiplied by the transmittance ($0.45$), which reduces the direct solar energy by 55\% before reaching the artifact.
+
+The NEE rays into the Cosine Hemisphere for the indirect dose $E_{ind}$ lose energy while interacting with the matte floor, whose low albedo acts as the energy sink, preventing light from entering back to the lower surfaces of the artifact.
+
+\subsection{Results of the Material Intervention}
+
+Scenario B shows the drastic decrease in the light stress, with the peak dose falling from 6.6 millions to about 150 thousands Lux-Hours (97.7\% reduction). Nevertheless, it is still above the CIE 50,000 Lux-Hour limit for highly sensitive artifacts, which means that material filtration alone is not enough in case of the exposed position of the artifact to the southern window.
+
+\section{Scenario C: Positional Optimization and Geometric Occlusion}
+
+\subsection{The Role of Architectural Shadows}
+
+Scenario C evaluates the influence of the spatial position and geometric occlusion. Materials have been reverted to the highly reflective baselines ($T = 0.84$ and $R = 0.50$), while the artifact is moved to the deeply shaded corner, distant from the direct southern window illumination.
+
+\subsection{Phenomenological Analysis: Window vs Corner Geometry}
+
+The phenomenological comparison of the hourly peak doses has been made for a 10-day window around the winter solstice. 
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig6_window_vs_corner_comparison.png}}
+    \caption{The 10-day winter solstice comparison of peak hourly doses for artifacts placed next to windows versus artifacts placed deep in room corners. The window placement is dominated by direct solar energy, while the corner placement is exclusively driven by diffuse ambient skylight.}
+    \label{fig:window_vs_corner}
+\end{figure}
+
+As shown in Figure \ref{fig:window_vs_corner}, the window-adjacent artifact has direct solar driven hourly dose spikes near 30,000 Lux-Hours at the solar noon, while the corner-located one has zero direct dose, with the 5,000 Lux-Hour dose being caused exclusively by the indirect diffuse skylight, which is reflected by the walls and floor. In the HLSL compute shader, the shadow ray to the sun intersecting a solid wall terminates ($t > 0$, $T = 0$), thus giving $E_{dir} = 0$. Thus, this validates the ability of the engine to distinguish direct and indirect transport via BVH intersections, avoiding the rasterization-based glowing artifacts.
+
+\section{Scenario D: Combined Optimal Conservation}
+
+\subsection{Synergistic Interventions}
+
+Scenario D implements the optimal strategy: the geometric occlusion (corner placement) in combination with the material filtration (tinted glass $T = 0.45$ and matte floor $R = 0.15$).
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig2_final_dose_bar.png}}
+    \caption{Comparative study of peak light dose across the four scenarios. Scenario D demonstrates the synergistic effectiveness of combining geometric occlusion with protective material interventions, achieving a dose safely below the 50,000 Lux-Hour limit.}
+    \label{fig:scenario_comparative_bar}
+\end{figure}
+
+Figure \ref{fig:scenario_comparative_bar} represents the bar plot comparison of the peak light doses across Scenarios A to D, demonstrating that Scenario D reaches the conservation objective: the total peak dose over 8,760 hours falls significantly below the 50,000 Lux-Hour threshold.
+
+The synergy of effects demonstrates the value of the \textit{ChronoLux} Digital Twin. The framework allows evaluating the combined interventions before any physical changes will be made, reducing risks and costs in conservation planning.
+
+\section{Scientific Validation: Variance and Convergence}
+
+\subsection{The Necessity of Mathematical Integrity}
+
+Although the heatmaps and CSV telemetry provide actionable data, their scientific validity needs to be verified. The \textit{ChronoLux} engine uses the Monte Carlo stochastic integration method, which inevitably introduces the variance (or noise) in the sampling. Ineffective sample numbers and the biased PRNGs may lead to the inaccurate dosimetry, which will decrease the metrological validity of the Digital Twin.
+
+In order to verify the integration, the network of virtual Lux Sensors performs the asynchronous sampling of the raw 32-bit floating-point accumulation buffers to compute spatial variance and the convergence error during runtime.
+
+\subsection{Spatial Dose Variance Tracking}
+
+Spatial variance ($\sigma^2$) is the measure of the deviation of individual texel doses from the mean value. The engine computes it as follows:
+
+\begin{equation}
+    \sigma^2 = \frac{1}{N} \sum_{i=1}^{N} (D_i - \bar{D})^2
+\end{equation}
+
+Where $N$ is the number of valid surface texels, $D_i$ is the dose at the texel $i$, and $\bar{D}$ is the mean dose.
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig3a_spatial_dose_variance.png}}
+    \caption{Continuous monitoring of light spatial variance ($\sigma^2$) across the 8760-hour simulation. The variance directly tracks the physical accumulation of light stress on exposed geometry.}
+    \label{fig:validation_stress_variance}
+\end{figure}
+
+Figure \ref{fig:validation_stress_variance} represents the tracking of spatial variance across the 8,760-hour simulation, showcasing the stable upward trend with the distinctive steps in winter months, which is consistent with the physical expectations, since the exposed regions accumulate energy, while occluded regions stay dark.
+
+\subsection{Monte Carlo Convergence Error (SEM)}
+
+In order to verify that 64 rays per texel are enough to make the integration stable, the standard error of the mean (SEM) is computed:
+
+\begin{equation}
+    SEM = \frac{\sigma}{\sqrt{N_{rays}}}
+\end{equation}
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.65\columnwidth]{fig3b_monte_carlo_convergence.png}}
+    \caption{Virtual Sensor Monte Carlo convergence error (SEM) steadily dropping and stabilizing near zero, confirming the mathematical reliability of the GPU-based path tracing integration.}
+    \label{fig:validation_stress_error}
+\end{figure}
+
+Figure \ref{fig:validation_stress_error} demonstrates the gradual decrease and stabilization near zero of SEM, which means a healthy Monte Carlo estimator.
+
+\subsection{Asynchronous Telemetry Pipeline Integrity}
+
+In order to keep the performance of the engine, the telemetry pipeline is asynchronous. Locked GPU readback of a 2K buffer per frame degrades the performance; therefore, the \textit{ChronoLux} engine uses \texttt{AsyncGPUReadback} API. The data requests are issued to the GPU, while the CPU thread continues its work, making possible the 60 FPS viewport rendering without any interruption.
+
+\begin{lstlisting}[language=C, caption={Asynchronous background thread in \texttt{LightDoseSimulator.cs} ensuring non-blocking data extraction.}, label={lst:async_readback}]
+IEnumerator ExtractTelemetryAsync() {
+    var request = AsyncGPUReadback.Request(accumulationBuffer);
+    while (!request.done) {
+        yield return null; // Yield to main thread, keep 60 FPS
+    }
+
+    if (request.hasError) {
+        Debug.LogError("VRAM Readback Failed.");
+        yield break;
+    }
+
+    var data = request.GetData<float>();
+    ProcessVarianceMetrics(data);
+}
+\end{lstlisting}
+
+As shown above, the CPU thread processes variance metrics only after the GPU tells that the transfer is completed, which ensures that the CSV files for validation graph generation contain complete radiometric data independently of the rendering.
+
+\section{Conclusion of the Empirical Validation}
+
+The comprehensive empirical validation proves that the \textit{ChronoLux} framework represents a scientifically sound instrument for the predictive light dosimetry. Correctly reproducing architectural occlusion physics, modeling energy attenuation through the refractive materials, and mathematically proving the convergence of the Monte Carlo core makes the engine to elevate from the graphics prototype to the metrological Digital Twin suitable for use in the contemporary cultural heritage conservation practices.
