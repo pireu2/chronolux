@@ -26,7 +26,7 @@ A critical feature of the \textit{ChronoLux} framework is its robust asset pipel
 Upon launching the executable, the user is greeted by the Project Launcher Dashboard. This interface manages the multi-project ecosystem, ensuring that different museum wings, artifacts, or hypothetical conservation scenarios can be saved and loaded independently.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.75\columnwidth]{fig_launcher_dashboard.png}}
+    \centerline{\includegraphics[width=0.6\columnwidth]{fig_launcher_dashboard.png}}
     \caption{The Project Launcher Dashboard, allowing for the creation and management of independent simulation profiles via JSON persistence.}
     \label{fig:user_launcher}
 \end{figure}
@@ -38,9 +38,16 @@ As shown in Figure \ref{fig:user_launcher}, the launcher lists all previously cr
 Entering a project loads the 3D Virtual Laboratory. The user interface within the laboratory is divided into the central 3D viewport and the surrounding analytical UXML panels.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.85\columnwidth]{fig_viewport_navigation.png}}
-    \caption{The main 3D viewport showcasing the target artifact and the central crosshair used for the \texttt{ObjectPicker} interaction system.}
-    \label{fig:user_viewport}
+    \begin{minipage}[t]{0.48\columnwidth}
+        \centerline{\includegraphics[width=\textwidth]{fig_viewport_navigation.png}}
+        \caption{The main 3D viewport showcasing the target artifact and the central crosshair used for the \texttt{ObjectPicker} interaction system.}
+        \label{fig:user_viewport}
+    \end{minipage}\hfill
+    \begin{minipage}[t]{0.48\columnwidth}
+        \centerline{\includegraphics[width=\textwidth]{fig_heatmap_visualisation.png}}
+        \caption{The false-color "Inferno" heatmap visualization mapping peak light stress directly onto the artifact's 3D geometry in real-time.}
+        \label{fig:user_heatmap}
+    \end{minipage}
 \end{figure}
 
 Navigation is handled via the \texttt{FreeLookCamera} system. To look around the environment, the user must click and drag the mouse within the viewport area. Movement is achieved using the standard \texttt{W, A, S, D} keyboard configuration.
@@ -53,9 +60,16 @@ At the center of the screen, a precise crosshair facilitates the \texttt{ObjectP
 The left side of the screen houses the live telemetry and transformation Heads-Up Display (HUD). This panel provides real-time feedback on both the spatial configuration of the selected artifact and the ongoing radiometric calculations.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.85\columnwidth]{fig_hud_telemetry.png}}
-    \caption{The Laboratory HUD displaying real-time transformation controls, astrometric telemetry, Monte Carlo variance tracking, and the dynamic hourly radiation waveform.}
-    \label{fig:user_hud}
+    \begin{minipage}[t]{0.48\columnwidth}
+        \centerline{\includegraphics[width=\textwidth]{fig_hud_telemetry.png}}
+        \caption{The Laboratory HUD displaying real-time transformation controls, astrometric telemetry, Monte Carlo variance tracking, and the dynamic hourly radiation waveform.}
+        \label{fig:user_hud}
+    \end{minipage}\hfill
+    \begin{minipage}[t]{0.48\columnwidth}
+        \centerline{\includegraphics[width=\textwidth]{fig_simulation_configuration.png}}
+        \caption{The Simulation Configuration panel managing the orchestration of the 8,760-hour loop, featuring execution controls, a progression bar, and a daily accumulation slider.}
+        \label{fig:user_sim_config}
+    \end{minipage}
 \end{figure}
 
 As illustrated in Figure \ref{fig:user_hud}, the HUD contains several critical subsystems:
@@ -74,8 +88,8 @@ As illustrated in Figure \ref{fig:user_hud}, the HUD contains several critical s
 Selecting any object in the viewport via the crosshair activates the Material Configuration catalog on the right-hand side of the interface. This catalog is crucial for setting up the preventive conservation scenarios (e.g., swapping clear glass for UV-tinted glass).
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.8\columnwidth]{fig_material_catalog.png}}
-    \caption{The Material Catalog interface, featuring real-time Reflectance and Transmittance sliders and the scientific CC0 texture library.}
+    \centerline{\includegraphics[width=0.6\columnwidth]{fig_material_catalog.png}}
+    \caption{The Material Catalog interface, featuring real-time Reflectance and Transmittance sliders and the texture library.}
     \label{fig:user_material}
 \end{figure}
 
@@ -86,12 +100,6 @@ Additionally, the catalog features a built-in library of scientifically validate
 \section{Simulation Configuration and Execution}
 
 Once the environment geometry and materials are properly configured, the user must initialize the time-stepping simulation loop. This is managed via the Simulation Configuration panel.
-
-\begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.85\columnwidth]{fig_simulation_configuration.png}}
-    \caption{The Simulation Configuration panel managing the orchestration of the 8,760-hour loop, featuring execution controls, a progression bar, and a daily accumulation slider.}
-    \label{fig:user_sim_config}
-\end{figure}
 
 The Simulation Configuration panel (Figure \ref{fig:user_sim_config}) provides complete control over the temporal execution of the Digital Twin:
 \begin{itemize}
@@ -104,20 +112,8 @@ The Simulation Configuration panel (Figure \ref{fig:user_sim_config}) provides c
 
 As the simulation progresses or after it successfully completes the full year cycle, the analytical data must be visualized and exported.
 
-\begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.8\columnwidth]{fig_heatmap_visualisation.png}}
-    \caption{The false-color "Inferno" heatmap visualization mapping peak light stress directly onto the artifact's 3D geometry in real-time.}
-    \label{fig:user_heatmap}
-\end{figure}
-
 \subsection{Viewport Heatmap}
 The engine features a sophisticated false-color heatmap shader, mapped directly onto the geometry of the target artifact (Figure \ref{fig:user_heatmap}). Using a high-contrast "Inferno" palette (transitioning from deep purple through red to bright yellow), it visually isolates the spatial hotspots receiving the highest dose. This allows conservators to intuitively understand which physical areas of the object are at maximum risk without having to read raw numeric data.
 
-\begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.7\columnwidth]{fig_csv_export.png}}
-    \caption{The generated headless export outputs, including the \texttt{SimulationMetrics.csv} file for external graphing and the EXR snapshots.}
-    \label{fig:user_csv}
-\end{figure}
-
 \subsection{Headless Telemetry Export}
-For rigorous academic and metrological analysis, visual heatmaps are insufficient. By utilizing the export functionality (Figure \ref{fig:user_csv}), the asynchronous C\# orchestration thread writes the entire year's worth of accumulated data to a robust CSV log file. This file contains the hourly breakdowns of Altitude, Azimuth, Peak Dose, Average Dose, and Spatial Variance. Simultaneously, high dynamic range EXR image snapshots of the accumulation buffers are exported. These standardized formats ensure that the raw scientific data generated by \textit{ChronoLux} can be natively imported into external tools like Microsoft Excel, Python, or MATLAB for further graphing, comparative study, and publication formatting.
+For rigorous academic and metrological analysis, visual heatmaps are insufficient. By utilizing the export functionality, the asynchronous C\# orchestration thread writes the entire year's worth of accumulated data to a robust CSV log file. This file contains the hourly breakdowns of Altitude, Azimuth, Peak Dose, Average Dose, and Spatial Variance. Simultaneously, high dynamic range EXR image snapshots of the accumulation buffers are exported. These standardized formats ensure that the raw scientific data generated by \textit{ChronoLux} can be natively imported into external tools like Microsoft Excel, Python, or MATLAB for further graphing, comparative study, and publication formatting.

@@ -98,13 +98,13 @@ Architectural materials inside the UXML interface have been configured to repres
 The simulations have been started in \textit{ChronoLux} engine, accumulating 8,760 hours of the 2026 meteorological year. Extraction of telemetry data from the \texttt{\_DirectDoseMap} and \texttt{\_IndirectDoseMap} GPU buffers has shown a catastrophic light stress.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig1a_cumulative_max_dose.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig1a_cumulative_max_dose.png}}
     \caption{CIE Light Dosimetry results for Scenario A reveal cumulative light stress exposure over 8760 hours resulting in a large peak light dose of 6.6M Lux-Hours far greater than the maximum recommended light stress of 50,000 Lux-Hours.}
     \label{fig:scenario_a_max}
 \end{figure}
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig1b_cumulative_avg_dose.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig1b_cumulative_avg_dose.png}}
     \caption{CIE Light Dosimetry results for Scenario A showing cumulative average dose over the 8760 hours. The exponential growth curve illustrates the unmitigated accumulation of energy.}
     \label{fig:scenario_a_avg}
 \end{figure}
@@ -116,7 +116,7 @@ Figures \ref{fig:scenario_a_max} and \ref{fig:scenario_a_avg} illustrating cumul
 In order to explain the mechanisms of this energy accumulation, diurnal and seasonal irradiance fluctuations have been analyzed using the diurnal heatmap.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig4_diurnal_heatmap.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig4_diurnal_heatmap.png}}
     \caption{A heat map of diurnal exposure illustrates hourly exposure levels in a 365-day cycle, displaying high frequency peaks corresponding to solar noon hours and seasonal solar elevation changes.}
     \label{fig:scenario_a_diurnal}
 \end{figure}
@@ -149,10 +149,10 @@ Scenario C evaluates the influence of the spatial position and geometric occlusi
 
 \subsection{Phenomenological Analysis: Window vs Corner Geometry}
 
-The phenomenological comparison of the hourly peak doses has been made for a 10-day window around the winter solstice. 
+The phenomenological comparison of the hourly peak doses has been made for a 10-day window around the winter solstice.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig6_window_vs_corner_comparison.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig6_window_vs_corner_comparison.png}}
     \caption{The 10-day winter solstice comparison of peak hourly doses for artifacts placed next to windows versus artifacts placed deep in room corners. The window placement is dominated by direct solar energy, while the corner placement is exclusively driven by diffuse ambient skylight.}
     \label{fig:window_vs_corner}
 \end{figure}
@@ -166,7 +166,7 @@ As shown in Figure \ref{fig:window_vs_corner}, the window-adjacent artifact has 
 Scenario D implements the optimal strategy: the geometric occlusion (corner placement) in combination with the material filtration (tinted glass $T = 0.45$ and matte floor $R = 0.15$).
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig2_final_dose_bar.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig2_final_dose_bar.png}}
     \caption{Comparative study of peak light dose across the four scenarios. Scenario D demonstrates the synergistic effectiveness of combining geometric occlusion with protective material interventions, achieving a dose safely below the 50,000 Lux-Hour limit.}
     \label{fig:scenario_comparative_bar}
 \end{figure}
@@ -194,7 +194,7 @@ Spatial variance ($\sigma^2$) is the measure of the deviation of individual texe
 Where $N$ is the number of valid surface texels, $D_i$ is the dose at the texel $i$, and $\bar{D}$ is the mean dose.
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig3a_spatial_dose_variance.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig3a_spatial_dose_variance.png}}
     \caption{Continuous monitoring of light spatial variance ($\sigma^2$) across the 8760-hour simulation. The variance directly tracks the physical accumulation of light stress on exposed geometry.}
     \label{fig:validation_stress_variance}
 \end{figure}
@@ -210,7 +210,7 @@ In order to verify that 64 rays per texel are enough to make the integration sta
 \end{equation}
 
 \begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.65\columnwidth]{fig3b_monte_carlo_convergence.png}}
+    \centerline{\includegraphics[width=0.85\columnwidth]{fig3b_monte_carlo_convergence.png}}
     \caption{Virtual Sensor Monte Carlo convergence error (SEM) steadily dropping and stabilizing near zero, confirming the mathematical reliability of the GPU-based path tracing integration.}
     \label{fig:validation_stress_error}
 \end{figure}
