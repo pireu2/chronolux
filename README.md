@@ -3,10 +3,10 @@
 [![Unity](https://img.shields.io/badge/Unity-2022.3+-black?logo=unity)](https://unity.com/)
 [![Render Pipeline](https://img.shields.io/badge/Pipeline-HDRP-blue)](#)
 [![API](https://img.shields.io/badge/API-DirectX_12_DXR-green)](#)
-[![Status](https://img.shields.io/badge/Status-Software_Complete-success)](#)
+[![Status](https://img.shields.io/badge/Status-Project_Complete-success)](#)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**ChronoLux** is a scientifically rigorous metrology and visualization tool designed for the preventive conservation of cultural heritage artifacts. Built as a CS Diploma Project, it functions as a "Digital Twin," simulating long-term solar radiation exposure and calculating cumulative environmental light damage (measured in **Lux-Hours**) on 3D artifacts.
+**ChronoLux** is a scientifically rigorous metrology and visualization tool designed for the preventive conservation of cultural heritage artifacts. Successfully completed as a CS Diploma Project, it functions as a "Digital Twin," simulating long-term solar radiation exposure and calculating cumulative environmental light damage (measured in **Lux-Hours**) on 3D artifacts.
 
 **Read the full academic thesis:** [ChronoLux Thesis (PDF)](Paper/paper.pdf)
 
@@ -37,6 +37,8 @@ All scene geometry is bound by strict thermodynamic laws. The custom `Simulation
 - **Virtual Lux Sensors:** Deployable 3D probes that act as digital light meters. They calculate expected theoretical irradiance ($E = E_{beam} \cdot \cos(\theta) + E_{diffuse} \cdot 0.5$) and validate the Monte Carlo raytracer's output, actively tracking percentage error margins.
 - **False-Color Heatmap Visualization:** High-performance HDRP surface shader maps the raw Float32 Lux-Hour data into an "Inferno" (Purple-Red-Yellow) gradient. This enables curators to instantly identify microscopic high-risk exposure hotspots.
 - **Deterministic RTAS:** Enforces absolute strict sorting of Renderer Instance IDs during Acceleration Structure generation to guarantee repeatable scientific data across different hardware executions.
+- **Asynchronous Runtime Mesh Parsing:** Background-threaded OBJ parser capable of loading multi-million vertex photogrammetry models without stalling the main Unity thread.
+- **Interactive Object Inspection:** A robust crosshair-based `ObjectPicker` combined with a `FreeLookCamera` (featuring Shift-key non-linear velocity multipliers) for precise architectural exploration.
 - **Headless Data Pipeline:** Asynchronous Coroutines safely read back GPU memory to generate massive multi-column CSV datasets (tracking `DeltaMaxDose`, `DoseVariance`, `Coverage`, and telemetry) without stalling the main simulation thread.
 
 ---

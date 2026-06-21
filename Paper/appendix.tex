@@ -121,6 +121,153 @@ float TracePath(float3 origin, float3 direction, float3 surfaceNormal, inout uin
 }
 \end{lstlisting}
 
+\begin{lstlisting}[language=C++, caption={UVSpaceBaker.shader: Custom Unity shader used to force the projection of the 3D model onto the near-far clip plane for texture baking.}, label={lst:uvspacebaker}]
+Shader "Hidden/UVSpaceBaker"
+{
+    SubShader
+    {
+        Tags { "RenderType" = "Opaque" }
+        Pass
+        {
+            Cull Off ZWrite Off ZTest Always
+            HLSLPROGRAM
+            #pragma vertex Vert
+            #pragma fragment Frag
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+
+            float4x4 _O2W, _O2WIT;
+            struct Attributes { float3 posOS : POSITION; float3 nrmOS : NORMAL; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 posCS : SV_POSITION; float3 posWS : TEXCOORD0; float3 nrmWS : TEXCOORD1; };
+
+            Varyings Vert(Attributes IN)
+            {
+                Varyings OUT;
+                float2 ndc = IN.uv * 2.0 - 1.0;
+                ndc.y *= -1.0; // Flip for RT
+                OUT.posCS = float4(ndc, 0.5, 1.0);
+                OUT.posWS = mul(_O2W, float4(IN.posOS, 1.0)).xyz;
+                OUT.nrmWS = mul((float3x3)_O2WIT, IN.nrmOS);
+                return OUT;
+            }
+
+            struct FragOut { float4 pos : SV_Target0; float4 nrm : SV_Target1; };
+            FragOut Frag(Varyings IN)
+            {
+                FragOut OUT;
+                OUT.pos = float4(IN.posWS, 1.0);
+                OUT.nrm = float4(normalize(IN.nrmWS), 1.0);
+                return OUT;
+            }
+            ENDHLSL
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language=C++, caption={HeatmapVisualizer.shader: High-performance HDRP surface shader mapping accumulated float lux data into the "Inferno" color palette.}, label={lst:heatmapvisualizer}]
+Shader "ChronoLux/HeatmapVisualizer"
+{
+    Properties
+    {
+        [NoScaleOffset] _DoseMap("Accumulated Dose Map (float)", 2D) = "black" {}
+        _MinDose("Min Range", Float) = 0.0
+        _MaxDose("Max Range", Float) = 100000.0
+        [HideInInspector] _SelectionColor("Selection Glow", Color) = (0,0,0,0)
+    }
+    SubShader
+    {
+        Tags { "RenderType"="Opaque" "RenderPipeline"="HDRenderPipeline" "Queue"="Geometry" }
+        
+        Pass
+        {
+            Name "ForwardOnly"
+            Tags { "LightMode" = "ForwardOnly" }
+            Cull Off ZWrite On ZTest LEqual
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #define SHADERPASS SHADERPASS_FORWARD
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct Attributes { float3 positionOS : POSITION; float2 uv : TEXCOORD0; };
+            struct Varyings { float4 positionCS : SV_POSITION; float2 uv : TEXCOORD0; };
+            
+            Texture2D<float> _DoseMap;
+            SamplerState sampler_DoseMap;
+            float _MinDose;
+            float _MaxDose;
+            float4 _SelectionColor;
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                float3 posWS = mul(GetObjectToWorldMatrix(), float4(input.positionOS, 1.0)).xyz;
+                output.positionCS = mul(GetWorldToHClipMatrix(), float4(posWS, 1.0));
+                output.uv = input.uv;
+                return output;
+            }
+
+            float3 GetHeatmapColor(float t)
+            {
+                if (t <= 0.0) return float3(0, 0, 0);
+                float3 c0 = float3(0.0, 0.0, 0.0);   // Black
+                float3 c1 = float3(0.2, 0.0, 0.5);   // Purple
+                float3 c2 = float3(0.8, 0.0, 0.5);   // Magenta
+                float3 c3 = float3(1.0, 0.5, 0.0);   // Orange
+                float3 c4 = float3(1.0, 0.9, 0.2);   // Yellow
+                t = saturate(t);
+                if (t < 0.25) return lerp(c0, c1, t * 4.0);
+                if (t < 0.50) return lerp(c1, c2, (t - 0.25) * 4.0);
+                if (t < 0.75) return lerp(c2, c3, (t - 0.50) * 4.0);
+                return lerp(c3, c4, (t - 0.75) * 4.0);
+            }
+
+            float4 frag(Varyings input) : SV_Target
+            {
+                float dose = _DoseMap.Sample(sampler_DoseMap, input.uv).r;
+                float t = (dose - _MinDose) / max(1.0, _MaxDose - _MinDose);
+                float3 baseColor = GetHeatmapColor(t);
+                
+                // Add Selection/Hover Glow
+                // We add it as an additive "rim/glow" effect
+                return float4(baseColor + _SelectionColor.rgb * _SelectionColor.a, 1.0);
+            }
+            ENDHLSL
+        }
+        
+        Pass
+        {
+            Name "DepthForwardOnly"
+            Tags { "LightMode" = "DepthForwardOnly" }
+            Cull Off ZWrite On
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #define SHADERPASS SHADERPASS_DEPTH_ONLY
+            #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Common.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/ShaderLibrary/ShaderVariables.hlsl"
+
+            struct Attributes { float3 positionOS : POSITION; };
+            struct Varyings { float4 positionCS : SV_POSITION; };
+
+            Varyings vert(Attributes input)
+            {
+                Varyings output;
+                float3 posWS = mul(GetObjectToWorldMatrix(), float4(input.positionOS, 1.0)).xyz;
+                output.positionCS = mul(GetWorldToHClipMatrix(), float4(posWS, 1.0));
+                return output;
+            }
+            float4 frag(Varyings input) : SV_Target { return 0; }
+            ENDHLSL
+        }
+    }
+    Fallback "HDRP/Unlit"
+}
+\end{lstlisting}
+
 \section{C\# Orchestrator Implementations}
 \label{apx:csharp_code}
 
@@ -326,3 +473,1008 @@ if (expectedArea > 1f) {
     if (hourlyVariance < 0f) hourlyVariance = 0f;
 }
 \end{lstlisting}
+
+\section{Additional C\# Application Logic}
+\label{apx:additional_csharp}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={ChronoProject.cs: Serialization model for project parameters.}, label={lst:chronoproject}]
+using System;
+using System.Collections.Generic;
+using UnityEngine;
+
+namespace ChronoLux.Project
+{
+    [Serializable]
+    public class ChronoProject
+    {
+        public string projectName;
+        [Obsolete("Use artifactFileName instead. Kept for migration.")]
+        public string modelFileName; 
+        public string artifactFileName;
+        public List<string> environmentFileNames = new List<string>();
+        
+        [Header("Location")]
+        public double latitude = 44.4268;
+        public double longitude = 26.1025;
+        public double utcOffset = 3.0;
+
+        [Header("Simulation")]
+        public int year = 2025;
+        public int startDay = 1;
+        public int endDay = 365;
+        public int samplesPerPixel = 8;
+        
+        // Artifact Transformation
+        public Vector3 artifactPosition = Vector3.zero;
+        public Vector3 artifactScale = Vector3.one;
+        
+        // Dictionary mapping mesh object names to material preset names
+        // Note: For JSON serialization, we'll use two lists to represent the dictionary
+        public List<string> objectNames = new List<string>();
+        public List<string> materialPresetNames = new List<string>();
+
+        public void SetMaterial(string objectName, string presetName)
+        {
+            int index = objectNames.IndexOf(objectName);
+            if (index >= 0)
+            {
+                materialPresetNames[index] = presetName;
+            }
+            else
+            {
+                objectNames.Add(objectName);
+                materialPresetNames.Add(presetName);
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={ProjectManager.cs: Manages the serialization and deserialization of the simulation project.}, label={lst:projectmanager}]
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+
+namespace ChronoLux.Project
+{
+    public static class ProjectManager
+    {
+        private static string ProjectFolder => Path.Combine(Application.persistentDataPath, "Projects");
+        public static string ModelFolder => Path.Combine(Application.persistentDataPath, "Models");
+
+        static ProjectManager()
+        {
+            if (!Directory.Exists(ProjectFolder)) Directory.CreateDirectory(ProjectFolder);
+            if (!Directory.Exists(ModelFolder)) Directory.CreateDirectory(ModelFolder);
+        }
+
+        public static void SaveProject(ChronoProject project)
+        {
+            string json = JsonUtility.ToJson(project, true);
+            string path = Path.Combine(ProjectFolder, project.projectName + ".json");
+            File.WriteAllText(path, json);
+            Debug.Log($"[ProjectManager] Saved project to {path}");
+        }
+
+        public static ChronoProject LoadProject(string name)
+        {
+            string path = Path.Combine(ProjectFolder, name + ".json");
+            if (!File.Exists(path)) return null;
+
+            string json = File.ReadAllText(path);
+            return JsonUtility.FromJson<ChronoProject>(json);
+        }
+
+        public static List<string> GetAvailableProjects()
+        {
+            var projects = new List<string>();
+            var files = Directory.GetFiles(ProjectFolder, "*.json");
+            foreach (var file in files) projects.Add(Path.GetFileNameWithoutExtension(file));
+            return projects;
+        }
+
+        public static List<string> GetAvailableModels()
+        {
+            var models = new List<string>();
+            if (!Directory.Exists(ModelFolder)) return models;
+
+            var files = Directory.GetFiles(ModelFolder, "*.obj");
+            foreach (var file in files) models.Add(Path.GetFileName(file));
+            return models;
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={IrradianceBaker.cs: Orchestrates the hardware-accelerated DXR raytracing passes.}, label={lst:irradiancebaker}]
+using UnityEngine;
+using UnityEngine.Rendering;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+
+[AddComponentMenu("ChronoLux/Irradiance Baker")]
+public class IrradianceBaker : MonoBehaviour
+{
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MeshMetadata
+    {
+        public uint vertexOffset;
+        public uint indexOffset;
+        public uint hasGeometry; 
+        public uint padding;     
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct SensorInput
+    {
+        public Vector4 position; 
+        public Vector4 normal;   
+    }
+
+    private const int MAX_SUBMESHES = 8;
+
+    [Header("Assets")]
+    public RayTracingShader rayTracingShader;
+    public RayTracingShader sensorShader;
+
+    [Header("Fallback Simulation Material")]
+    [Range(0f, 1f)] public float defaultReflectance = 0.8f;
+    [Range(0f, 1f)] public float defaultTransmittance = 0.0f;
+
+    private RenderTexture _doseMap;
+    private RenderTexture _directDoseMap;
+    private RenderTexture _indirectDoseMap;
+    private RayTracingAccelerationStructure _rtas;
+    private ComputeBuffer _simulationMaterialBuffer;
+    private ComputeBuffer _vertexBuffer;
+    private ComputeBuffer _indexBuffer;
+    private ComputeBuffer _metadataBuffer;
+
+    private ComputeBuffer _sensorInputBuffer;
+    private ComputeBuffer _sensorOutputBuffer;
+    private SensorInput[] _cachedSensorInputs;
+    private float[] _cachedZeros;
+
+    private int _materialCount;
+    private bool _isInitialized = false;
+
+    private static readonly int _ID_PositionMap = Shader.PropertyToID("_PositionMap");
+    private static readonly int _ID_NormalMap = Shader.PropertyToID("_NormalMap");
+    private static readonly int _ID_DoseMap = Shader.PropertyToID("_DoseMap");
+    private static readonly int _ID_DirectDoseMap = Shader.PropertyToID("_DirectDoseMap");
+    private static readonly int _ID_IndirectDoseMap = Shader.PropertyToID("_IndirectDoseMap");
+    private static readonly int _ID_SceneRTAS = Shader.PropertyToID("_SceneRTAS");
+    private static readonly int _ID_SunDirection = Shader.PropertyToID("_SunDirection");
+    private static readonly int _ID_BeamLux = Shader.PropertyToID("_BeamLux");
+    private static readonly int _ID_DiffuseLux = Shader.PropertyToID("_DiffuseLux");
+    private static readonly int _ID_DeltaHours = Shader.PropertyToID("_DeltaHours");
+    private static readonly int _ID_MaterialCount = Shader.PropertyToID("_MaterialCount");
+    private static readonly int _ID_FrameIndex = Shader.PropertyToID("_FrameIndex");
+    private static readonly int _ID_SamplesPerPixel = Shader.PropertyToID("_SamplesPerPixel");
+    private static readonly int _ID_SimulationMaterials = Shader.PropertyToID("_SimulationMaterials");
+    private static readonly int _ID_MeshMetadata = Shader.PropertyToID("_MeshMetadata");
+    private static readonly int _ID_GlobalVertices = Shader.PropertyToID("_GlobalVertices");
+    private static readonly int _ID_GlobalIndices = Shader.PropertyToID("_GlobalIndices");
+    private static readonly int _ID_SensorInputs = Shader.PropertyToID("_SensorInputs");
+    private static readonly int _ID_SensorOutputs = Shader.PropertyToID("_SensorOutputs");
+
+    public RenderTexture DoseMap => _doseMap;
+    public RenderTexture DirectDoseMap => _directDoseMap;
+    public RenderTexture IndirectDoseMap => _indirectDoseMap;
+
+    private void OnValidate() => ClampEnergy(ref defaultReflectance, ref defaultTransmittance);
+    private static void ClampEnergy(ref float r, ref float t) { r = Mathf.Clamp01(r); t = Mathf.Clamp01(t); float s = r + t; if (s > 1f) { r /= s; t /= s; } }
+
+    private struct RendererSortEntry { public Renderer renderer; public string sortKey; }
+    private static string BuildTransformSortKey(Transform t) {
+        if (t == null) return string.Empty;
+        var s = new List<string>(8);
+        while (t != null) { s.Add($"{t.GetSiblingIndex():D6}:{t.name}"); t = t.parent; }
+        s.Reverse(); return string.Join("/", s);
+    }
+    private static string BuildRendererSortKey(Renderer r) {
+        if (r == null) return string.Empty;
+        string p = r.gameObject.scene.path ?? string.Empty;
+        string h = BuildTransformSortKey(r.transform);
+        int slot = 0; Renderer[] sib = r.GetComponents<Renderer>();
+        for (int i = 0; i < sib.Length; i++) if (ReferenceEquals(sib[i], r)) { slot = i; break; }
+        return $"{p}|{h}|{r.GetType().FullName}|{slot:D4}";
+    }
+
+    private void ResolveSimulationMaterial(Renderer renderer, out float reflectance, out float transmittance) {
+        reflectance = defaultReflectance; transmittance = defaultTransmittance;
+        var sim = renderer.GetComponent<SimulationMaterial>();
+        if (sim != null) { sim.GetClampedScalars(out reflectance, out transmittance); return; }
+        Material m = renderer.sharedMaterial;
+        if (m != null) {
+            if (m.HasProperty("_Reflectance")) reflectance = m.GetFloat("_Reflectance");
+            if (m.HasProperty("_Transmittance")) transmittance = m.GetFloat("_Transmittance");
+        }
+        ClampEnergy(ref reflectance, ref transmittance);
+    }
+
+    public void Initialize(int width, int height)
+    {
+        if (!SystemInfo.supportsRayTracing || rayTracingShader == null) return;
+        CleanUp();
+        _rtas = new RayTracingAccelerationStructure();
+
+        Renderer[] all = FindObjectsByType<Renderer>(FindObjectsSortMode.None);
+        var sorted = new List<RendererSortEntry>(all.Length);
+        foreach (var r in all) if (r != null && r.enabled && r.gameObject.activeInHierarchy) 
+            sorted.Add(new RendererSortEntry { renderer = r, sortKey = BuildRendererSortKey(r) });
+        
+        // Stable deterministic sort
+        sorted.Sort((a, b) => string.CompareOrdinal(a.sortKey, b.sortKey));
+
+        var mats = new List<Vector4>(sorted.Count);
+        var verts = new List<Vector4>(); 
+        var idxs = new List<uint>();
+        var metas = new MeshMetadata[Mathf.Max(1, sorted.Count) * MAX_SUBMESHES];
+
+        for (int i = 0; i < sorted.Count; i++) {
+            Renderer r = sorted[i].renderer; Mesh mesh = null; int subCount = 1;
+            if (r is MeshRenderer mr) { var mf = mr.GetComponent<MeshFilter>(); if (mf != null) mesh = mf.sharedMesh; }
+            else if (r is SkinnedMeshRenderer smr) mesh = smr.sharedMesh;
+            if (mesh != null) subCount = mesh.subMeshCount;
+            if (mesh != null && mesh.isReadable) {
+                uint vOff = (uint)verts.Count;
+                foreach(var v in mesh.vertices) verts.Add(new Vector4(v.x, v.y, v.z, 1.0f));
+                for (int s = 0; s < Mathf.Min(subCount, MAX_SUBMESHES); s++) {
+                    uint iOff = (uint)idxs.Count;
+                    foreach (int idx in mesh.GetIndices(s)) idxs.Add((uint)idx);
+                    metas[i * MAX_SUBMESHES + s] = new MeshMetadata { vertexOffset = vOff, indexOffset = iOff, hasGeometry = 1 };
+                }
+            }
+            ResolveSimulationMaterial(r, out float refl, out float trans);
+            mats.Add(new Vector4(refl, trans, 0f, 0f));
+            var flags = new RayTracingSubMeshFlags[subCount];
+            for (int s = 0; s < subCount; s++) flags[s] = RayTracingSubMeshFlags.Enabled | RayTracingSubMeshFlags.ClosestHitOnly;
+            _rtas.AddInstance(r, flags, false, false, 0xFF, (uint)mats.Count - 1);
+        }
+
+        _materialCount = mats.Count;
+        _simulationMaterialBuffer = new ComputeBuffer(Mathf.Max(1, _materialCount), 16);
+        _simulationMaterialBuffer.SetData(mats.Count > 0 ? mats.ToArray() : new Vector4[] { Vector4.zero });
+        _metadataBuffer = new ComputeBuffer(metas.Length, 16);
+        _metadataBuffer.SetData(metas);
+        _vertexBuffer = new ComputeBuffer(Mathf.Max(1, verts.Count), 16);
+        _vertexBuffer.SetData(verts.Count > 0 ? verts.ToArray() : new Vector4[] { Vector4.zero });
+        _indexBuffer = new ComputeBuffer(Mathf.Max(1, idxs.Count), 4);
+        _indexBuffer.SetData(idxs.Count > 0 ? idxs.ToArray() : new uint[] { 0 });
+        _rtas.Build();
+
+        _doseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "DoseMap" };
+        _doseMap.Create();
+        _directDoseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "DirectDoseMap" };
+        _directDoseMap.Create();
+        _indirectDoseMap = new RenderTexture(width, height, 0, RenderTextureFormat.RFloat) { enableRandomWrite = true, filterMode = FilterMode.Bilinear, name = "IndirectDoseMap" };
+        _indirectDoseMap.Create();
+
+        var cmd = new CommandBuffer { name = "Clear DoseMap" };
+        cmd.SetRenderTarget(_doseMap); cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_directDoseMap); cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_indirectDoseMap); cmd.ClearRenderTarget(true, true, Color.clear);
+        Graphics.ExecuteCommandBuffer(cmd); cmd.Release();
+
+        _isInitialized = true;
+    }
+
+    private uint _frameIndex = 0;
+
+    public void ClearDoseMap()
+    {
+        if (_doseMap == null) return;
+        var cmd = new CommandBuffer { name = "Reset DoseMap" };
+        cmd.SetRenderTarget(_doseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_directDoseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        cmd.SetRenderTarget(_indirectDoseMap);
+        cmd.ClearRenderTarget(true, true, Color.clear);
+        Graphics.ExecuteCommandBuffer(cmd);
+        cmd.Release();
+    }
+
+    public void DispatchRays(Vector3 sunDirection, float beamLux, float diffuseLux, float deltaHours, int samplesPerPixel, RenderTexture positionMap, RenderTexture normalMap)
+    {
+        if (!_isInitialized || positionMap == null || normalMap == null) return;
+        
+        Camera cam = Camera.main;
+#if UNITY_EDITOR
+        if (cam == null && UnityEditor.SceneView.lastActiveSceneView != null)
+            cam = UnityEditor.SceneView.lastActiveSceneView.camera;
+#endif
+        if (cam == null) cam = GetComponent<Camera>();
+        if (cam == null) return; 
+
+        _frameIndex++;
+        sunDirection.Normalize();
+
+        var sensors = VirtualLuxSensor.AllSensors;
+        int sensorCount = sensors.Count;
+        if (sensorCount > 0) {
+            if (_sensorInputBuffer == null || _sensorInputBuffer.count != sensorCount) {
+                if (_sensorInputBuffer != null) _sensorInputBuffer.Release();
+                if (_sensorOutputBuffer != null) _sensorOutputBuffer.Release();
+                _sensorInputBuffer = new ComputeBuffer(sensorCount, 32);
+                _sensorOutputBuffer = new ComputeBuffer(sensorCount, 4);
+                _cachedSensorInputs = new SensorInput[sensorCount];
+                _cachedZeros = new float[sensorCount];
+            }
+            for (int i = 0; i < sensorCount; i++) {
+                _cachedSensorInputs[i] = new SensorInput { 
+                    position = (Vector4)sensors[i].transform.position + new Vector4(0,0,0,1),
+                    normal = (Vector4)sensors[i].transform.up
+                };
+            }
+            _sensorInputBuffer.SetData(_cachedSensorInputs);
+            _sensorOutputBuffer.SetData(_cachedZeros);
+        }
+
+        var cmd = new CommandBuffer { name = "ChronoLux Dispatch" };
+        void SetCommon(RayTracingShader s) {
+            cmd.SetRayTracingAccelerationStructure(s, _ID_SceneRTAS, _rtas);
+            cmd.SetRayTracingBufferParam(s, _ID_SimulationMaterials, _simulationMaterialBuffer);
+            cmd.SetRayTracingBufferParam(s, _ID_MeshMetadata, _metadataBuffer);
+            cmd.SetRayTracingBufferParam(s, _ID_GlobalVertices, _vertexBuffer);
+            cmd.SetRayTracingBufferParam(s, _ID_GlobalIndices, _indexBuffer);
+            cmd.SetRayTracingVectorParam(s, _ID_SunDirection, sunDirection);
+            cmd.SetRayTracingFloatParam(s, _ID_BeamLux, beamLux);
+            cmd.SetRayTracingFloatParam(s, _ID_DiffuseLux, diffuseLux);
+            cmd.SetRayTracingIntParam(s, _ID_MaterialCount, _materialCount);
+            cmd.SetRayTracingIntParam(s, _ID_FrameIndex, (int)_frameIndex);
+            // Defend against huge loops/TDR
+            cmd.SetRayTracingIntParam(s, _ID_SamplesPerPixel, Mathf.Clamp(samplesPerPixel, 1, 64));
+        }
+
+        SetCommon(rayTracingShader);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_PositionMap, positionMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_NormalMap, normalMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_DoseMap, _doseMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_DirectDoseMap, _directDoseMap);
+        cmd.SetRayTracingTextureParam(rayTracingShader, _ID_IndirectDoseMap, _indirectDoseMap);
+        cmd.SetRayTracingFloatParam(rayTracingShader, _ID_DeltaHours, deltaHours);
+        cmd.DispatchRays(rayTracingShader, "IrradianceBakeRayGen", (uint)_doseMap.width, (uint)_doseMap.height, 1, cam);
+
+        if (sensorShader != null && sensorCount > 0) {
+            SetCommon(sensorShader);
+            cmd.SetRayTracingBufferParam(sensorShader, _ID_SensorInputs, _sensorInputBuffer);
+            cmd.SetRayTracingBufferParam(sensorShader, _ID_SensorOutputs, _sensorOutputBuffer);
+            cmd.DispatchRays(sensorShader, "SensorBakeRayGen", (uint)sensorCount, 1, 1, cam);
+        }
+
+        Graphics.ExecuteCommandBuffer(cmd);
+        cmd.Release();
+
+        if (sensorCount > 0) {
+            var snapshot = sensors.ToArray();
+            AsyncGPUReadback.Request(_sensorOutputBuffer, (req) => {
+                if (req.hasError) return;
+                var data = req.GetData<float>();
+                for (int i = 0; i < snapshot.Length; i++) {
+                    if (i < data.Length && snapshot[i] != null) {
+                        snapshot[i].UpdateReadings(data[i], sunDirection, beamLux, diffuseLux, deltaHours);
+                    }
+                }
+            });
+        }
+    }
+
+    private void CleanUp() {
+        if (_rtas != null) { _rtas.Release(); _rtas = null; }
+        void Rel(ref ComputeBuffer b) { if (b != null) { b.Release(); b = null; } }
+        Rel(ref _simulationMaterialBuffer); Rel(ref _vertexBuffer); Rel(ref _indexBuffer); Rel(ref _metadataBuffer); Rel(ref _sensorInputBuffer); Rel(ref _sensorOutputBuffer);
+        void RelRT(ref RenderTexture rt) { if (rt != null) { rt.Release(); if (Application.isPlaying) Destroy(rt); else DestroyImmediate(rt); rt = null; } }
+        RelRT(ref _doseMap); RelRT(ref _directDoseMap); RelRT(ref _indirectDoseMap);
+    }
+    private void OnDestroy() => CleanUp();
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={VirtualLuxSensor.cs: Provides ground-truth telemetry comparison via theoretical light accumulation.}, label={lst:virtualluxsensor}]
+using UnityEngine;
+using System.Collections.Generic;
+
+[AddComponentMenu("ChronoLux/Virtual Lux Sensor")]
+public class VirtualLuxSensor : MonoBehaviour
+{
+    // Static registration to avoid FindObjectsByType allocations
+    public static readonly List<VirtualLuxSensor> AllSensors = new List<VirtualLuxSensor>();
+
+    [Header("Validation Data")]
+    [ReadOnly, SerializeField] private float simulatedLux;
+    [ReadOnly, SerializeField] private float theoreticalLux;
+    [ReadOnly, SerializeField, Range(-100, 100)] private float errorPercent;
+    [ReadOnly, SerializeField] private float accumulatedDose;
+
+    [Header("Visuals")]
+    public bool showGizmo = true;
+    public Color gizmoColor = Color.cyan;
+
+    private void OnEnable() => AllSensors.Add(this);
+    private void OnDisable() => AllSensors.Remove(this);
+
+    public void UpdateReadings(float lux, Vector3 sunDir, float beamLux, float diffuseLux, float deltaHours = 0f)
+    {
+        simulatedLux = lux;
+        if (deltaHours > 0f) accumulatedDose += lux * deltaHours;
+        float nDotL = Mathf.Max(0, Vector3.Dot(transform.up, sunDir));
+        float direct = beamLux * nDotL;
+        theoreticalLux = direct + (diffuseLux * 0.5f); 
+
+        if (theoreticalLux > 1e-3f)
+            errorPercent = ((simulatedLux - theoreticalLux) / theoreticalLux) * 100f;
+        else
+            errorPercent = 0f;
+    }
+
+    public float currentLux => simulatedLux;
+    public float errorPercentage => errorPercent;
+    public float currentDose => accumulatedDose;
+
+    public void ResetDose() {
+        accumulatedDose = 0f;
+    }
+
+    private void OnDrawGizmos()
+    {
+        if (!showGizmo) return;
+        Gizmos.color = gizmoColor;
+        Gizmos.DrawWireSphere(transform.position, 0.05f);
+        Gizmos.DrawRay(transform.position, transform.up * 0.2f);
+        
+#if UNITY_EDITOR
+        UnityEditor.Handles.Label(transform.position + Vector3.up * 0.1f, $"{simulatedLux:F0} Lux");
+#endif
+    }
+}
+
+// Simple attribute to make fields read-only in inspector
+public class ReadOnlyAttribute : PropertyAttribute { }
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={ObjectPicker.cs: Crosshair-based physical material editor and artifact interaction logic.}, label={lst:objectpicker}]
+using UnityEngine;
+using UnityEngine.InputSystem;
+using ChronoLux.Library;
+using System;
+
+namespace ChronoLux.Interaction
+{
+    /// <summary>
+    /// Optimized Object Picker: Fixed frame drops by removing redundant per-frame material updates.
+    /// </summary>
+    public class ObjectPicker : MonoBehaviour
+    {
+        [Header("Assets")]
+        public MaterialLibrary library;
+        public Shader selectionShader;
+
+        [Header("Colors")]
+        public Color hoverColor = new Color(0.1f, 0.4f, 1.0f, 1.0f);
+        public Color selectColor = new Color(0.6f, 0.1f, 1.0f, 1.0f);
+
+        public event Action<GameObject> OnObjectSelected;
+        public event Action OnSelectionCleared;
+
+        [Header("Status (Read Only)")]
+        public GameObject hoveredObject;
+        public GameObject selectedObject;
+        
+        private Camera _cam;
+        private MaterialPropertyBlock _propBlock;
+        private Material _highlightMat;
+        private static readonly int _ID_GlowColor = Shader.PropertyToID("_GlowColor");
+
+        private void Start()
+        {
+            _cam = GetComponent<Camera>();
+            _propBlock = new MaterialPropertyBlock();
+            if (selectionShader != null) _highlightMat = new Material(selectionShader);
+        }
+
+        private void OnDestroy()
+        {
+            if (_highlightMat != null)
+            {
+                if (Application.isPlaying) Destroy(_highlightMat);
+                else DestroyImmediate(_highlightMat);
+            }
+        }
+
+        private void Update()
+        {
+            // Only allow selection while in Navigation Mode (Cursor Locked)
+            if (Cursor.lockState != CursorLockMode.Locked)
+            {
+                if (hoveredObject != null)
+                {
+                    if (hoveredObject != selectedObject) ClearHighlight(hoveredObject);
+                    hoveredObject = null;
+                }
+                return;
+            }
+
+            HandleHover();
+
+            if (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame)
+            {
+                HandleSelection();
+            }
+        }
+
+        private void HandleHover()
+        {
+            Ray ray = _cam.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
+
+            if (Physics.Raycast(ray, out RaycastHit hit, 100f))
+            {
+                GameObject hitObj = hit.collider.gameObject;
+
+                if (hitObj != hoveredObject)
+                {
+                    // Only clear if it's NOT the selected object
+                    if (hoveredObject != null && hoveredObject != selectedObject) 
+                        ClearHighlight(hoveredObject);
+
+                    hoveredObject = hitObj;
+
+                    // Only apply if it's NOT already the selected object (which has its own color)
+                    if (hoveredObject != selectedObject)
+                        ApplyHighlight(hoveredObject, hoverColor);
+                }
+            }
+            else
+            {
+                if (hoveredObject != null)
+                {
+                    if (hoveredObject != selectedObject) ClearHighlight(hoveredObject);
+                    hoveredObject = null;
+                }
+            }
+        }
+
+        private void HandleSelection()
+        {
+            if (hoveredObject != null)
+            {
+                if (selectedObject != null) ClearHighlight(selectedObject);
+                
+                selectedObject = hoveredObject;
+                ApplyHighlight(selectedObject, selectColor);
+                OnObjectSelected?.Invoke(selectedObject);
+            }
+            else
+            {
+                if (selectedObject != null) ClearHighlight(selectedObject);
+                selectedObject = null;
+                OnSelectionCleared?.Invoke();
+            }
+        }
+
+        private void ApplyHighlight(GameObject obj, Color color)
+        {
+            if (obj == null || _highlightMat == null) return;
+
+            // Skip highlights for artifacts to keep heatmap visible
+            if (obj.GetComponent<UVMapBaker>() != null || obj.GetComponentInParent<UVMapBaker>() != null)
+                return;
+
+            Renderer r = obj.GetComponentInChildren<Renderer>();
+            if (r == null) return;
+
+            // Set the color via PropertyBlock
+            r.GetPropertyBlock(_propBlock);
+            _propBlock.SetColor(_ID_GlowColor, color);
+            r.SetPropertyBlock(_propBlock);
+
+            // Ensure the material pass exists
+            Material[] mats = r.sharedMaterials;
+            bool exists = false;
+            foreach (var m in mats) if (m != null && m.shader == selectionShader) exists = true;
+
+            if (!exists)
+            {
+                Material[] newMats = new Material[mats.Length + 1];
+                for (int i = 0; i < mats.Length; i++) newMats[i] = mats[i];
+                newMats[newMats.Length - 1] = _highlightMat;
+                r.sharedMaterials = newMats;
+            }
+        }
+
+        private void ClearHighlight(GameObject obj)
+        {
+            if (obj == null) return;
+            Renderer r = obj.GetComponentInChildren<Renderer>();
+            if (r == null) return;
+
+            Material[] mats = r.sharedMaterials;
+            int count = 0;
+            foreach (var m in mats) if (m == null || m.shader != selectionShader) count++;
+
+            if (count < mats.Length)
+            {
+                Material[] newMats = new Material[count];
+                int j = 0;
+                for (int i = 0; i < mats.Length; i++)
+                {
+                    if (mats[i] != null && mats[i].shader != selectionShader)
+                        newMats[j++] = mats[i];
+                }
+                r.sharedMaterials = newMats;
+            }
+        }
+
+        public void AssignMaterialToSelected(MaterialPreset preset)
+        {
+            if (selectedObject == null || preset == null) return;
+            Renderer r = selectedObject.GetComponentInChildren<Renderer>();
+            if (r == null) return;
+
+            // Preserve the highlight while changing the base material
+            r.sharedMaterial = preset.visualMaterial;
+            
+            var sim = selectedObject.GetComponent<SimulationMaterial>() ?? selectedObject.AddComponent<SimulationMaterial>();
+            sim.reflectance = preset.reflectance;
+            sim.transmittance = preset.transmittance;
+
+            // Re-apply the selection color to the PropertyBlock (which might have been reset)
+            r.GetPropertyBlock(_propBlock);
+            _propBlock.SetColor(_ID_GlowColor, selectColor);
+            r.SetPropertyBlock(_propBlock);
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={FreeLookCamera.cs: Handles the free-look navigation within the simulated laboratory environment.}, label={lst:freelookcamera}]
+using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.EventSystems;
+
+namespace ChronoLux.Interaction
+{
+    /// <summary>
+    /// Snappy, precise camera controller updated for the Dashboard workflow.
+    /// Click 3D world to lock cursor and fly. ESC to return to UI.
+    /// </summary>
+    public class FreeLookCamera : MonoBehaviour
+    {
+        public float sensitivity = 0.05f;
+        public float speed = 5f;
+
+        private Vector2 _rotation;
+
+        private void Start()
+        {
+            _rotation.y = transform.eulerAngles.y;
+            _rotation.x = transform.eulerAngles.x;
+        }
+
+        private void Update()
+        {
+            var mouse = Mouse.current;
+            if (mouse == null) return;
+
+            // 1. Handle Cursor Toggles
+            if (Keyboard.current.escapeKey.wasPressedThisFrame)
+            {
+                if (Cursor.lockState == CursorLockMode.Locked)
+                {
+                    Cursor.lockState = CursorLockMode.None;
+                    Cursor.visible = true;
+                }
+                else
+                {
+                    Cursor.lockState = CursorLockMode.Locked;
+                    Cursor.visible = false;
+                }
+            }
+
+            // Click to lock (if not clicking on a UI element)
+            bool isOverUI = false;
+            if (EventSystem.current != null)
+            {
+                isOverUI = EventSystem.current.IsPointerOverGameObject();
+            }
+
+            if (mouse.leftButton.wasPressedThisFrame && !isOverUI)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+
+            // 2. Navigation (Only when locked)
+            if (Cursor.lockState != CursorLockMode.Locked) return;
+
+            Vector2 delta = mouse.delta.ReadValue() * sensitivity;
+            _rotation.y += delta.x;
+            _rotation.x = Mathf.Clamp(_rotation.x - delta.y, -89f, 89f);
+            transform.localRotation = Quaternion.Euler(_rotation.x, _rotation.y, 0f);
+
+            Vector3 input = Vector3.zero;
+            var kb = Keyboard.current;
+            if (kb.wKey.isPressed) input += transform.forward;
+            if (kb.sKey.isPressed) input += -transform.forward;
+            if (kb.aKey.isPressed) input += -transform.right;
+            if (kb.dKey.isPressed) input += transform.right;
+            if (kb.eKey.isPressed) input += Vector3.up;
+            if (kb.qKey.isPressed) input += Vector3.down;
+
+            float currentSpeed = speed;
+            if (kb.shiftKey.isPressed) currentSpeed *= 10f;
+
+            transform.position += input * currentSpeed * Time.deltaTime;
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{lstlisting}[language={[Sharp]C}, caption={SimulationMaterial.cs: Maintains energy-conserving reflectance and transmittance limits.}, label={lst:simulationmaterial}]
+using UnityEngine;
+
+[DisallowMultipleComponent]
+[AddComponentMenu("ChronoLux/Simulation Material")]
+public class SimulationMaterial : MonoBehaviour
+{
+    [Range(0f, 1f)] public float reflectance = 0.8f;
+    [Range(0f, 1f)] public float transmittance = 0.0f;
+
+    public void GetClampedScalars(out float reflectanceOut, out float transmittanceOut)
+    {
+        reflectanceOut = Mathf.Clamp01(reflectance);
+        transmittanceOut = Mathf.Clamp01(transmittance);
+
+        float sum = reflectanceOut + transmittanceOut;
+        if (sum <= 1.0f) return;
+
+        float inv = 1.0f / sum;
+        reflectanceOut *= inv;
+        transmittanceOut *= inv;
+    }
+
+    private void OnValidate()
+    {
+        GetClampedScalars(out reflectance, out transmittance);
+    }
+}
+\end{lstlisting}
+
+\section{Python Data Processing Pipeline}
+\label{apx:python_code}
+
+\begin{lstlisting}[language=Python, caption={data\_analysis.ipynb: Extracted Python code used for parsing the metrology telemetry CSV and rendering IEEE formatted figures.}, label={lst:dataanalysis}]
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import matplotlib.dates as mdates
+import matplotlib.colors as mcolors
+import os
+
+# Ensure clean output directory
+output_dir = 'figures'
+os.makedirs(output_dir, exist_ok=True)
+
+# Set high-quality styling for IEEE/ACM papers
+plt.style.use('seaborn-v0_8-paper')
+sns.set_theme(style="whitegrid", font_scale=1.2)
+
+# Custom color palette for the scenarios to ensure visual distinction
+colors = {"Scenario A (Baseline)": "#d62728", # Red
+          "Scenario B (Materials)": "#ff7f0e", # Orange
+          "Scenario C (Position)": "#1f77b4", # Blue
+          "Scenario D (Combined)": "#2ca02c"} # Green
+
+print("Libraries loaded successfully.")
+
+print("Loading CSV data and preprocessing...")
+files = {
+    "Scenario A (Baseline)": "scenario_a.csv",
+    "Scenario B (Materials)": "scenario_b.csv",
+    "Scenario C (Position)": "scenario_c.csv",
+    "Scenario D (Combined)": "scenario_d.csv"
+}
+
+dfs = {}        # Hourly data (for high-res profiling)
+dfs_daily = {}  # Daily data (for cleaner macro-scale plots)
+
+for label, filename in files.items():
+    df = pd.read_csv(filename)
+    df['Time'] = pd.to_datetime(df['Time'])
+    # Scale to kLux-Hours for cleaner Y-axis labels
+    df['MaxDose_kLux'] = df['MaxDose'] / 1000.0
+    df['AvgDose_kLux'] = df['AvgDose'] / 1000.0
+    
+    dfs[label] = df
+    
+    # --- Preprocessing: Resample to Daily Frequency ---
+    df_set = df.set_index('Time')
+    df_daily = df_set.resample('1D').agg({
+        'MaxDose_kLux': 'max',        # Cumulative metric: take max of the day
+        'AvgDose_kLux': 'max',        # Cumulative metric: take max of the day
+        'DoseVariance': 'mean',       # Average contrast stress over the day
+        'AvgSensorErrorPct': 'mean',  # Average daily convergence error
+        'DeltaMaxDose': 'max',        # Peak hourly hit across that specific day
+        'BeamLux': 'mean',
+        'DiffuseLux': 'mean'
+    }).reset_index()
+    dfs_daily[label] = df_daily
+
+print("Data loaded and preprocessed (Hourly & Daily variants created).")
+
+# ==========================================
+# Fig 1A: Cumulative Peak Dose (Max)
+# ==========================================
+fig, ax1 = plt.subplots(figsize=(8, 6))
+for label, df_d in dfs_daily.items():
+    ax1.plot(df_d['Time'], df_d['MaxDose_kLux'], label=label, color=colors[label], linewidth=2.5)
+ax1.set_title('Cumulative Peak Dose (Max)', fontweight='bold')
+ax1.set_xlabel('Month')
+ax1.set_ylabel('Cumulative Dose (kLux-Hours)')
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+ax1.legend()
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig1a_cumulative_max_dose.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 1B: Cumulative Average Dose (Avg)
+# ==========================================
+fig, ax2 = plt.subplots(figsize=(8, 6))
+for label, df_d in dfs_daily.items():
+    ax2.plot(df_d['Time'], df_d['AvgDose_kLux'], label=label, color=colors[label], linewidth=2.5, linestyle='--')
+ax2.set_title('Cumulative Average Dose (Avg)', fontweight='bold')
+ax2.set_xlabel('Month')
+ax2.set_ylabel('Cumulative Dose (kLux-Hours)')
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+ax2.legend(loc='upper left')
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig1b_cumulative_avg_dose.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 2: Final Dose Bar Chart
+# ==========================================
+labels = list(dfs_daily.keys())
+final_max = [df_d['MaxDose_kLux'].iloc[-1] for df_d in dfs_daily.values()]
+final_avg = [df_d['AvgDose_kLux'].iloc[-1] for df_d in dfs_daily.values()]
+
+x = np.arange(len(labels))
+width = 0.35
+
+fig, ax = plt.subplots(figsize=(10, 6))
+rects1 = ax.bar(x - width/2, final_max, width, label='Peak Dose', color=[colors[l] for l in labels], alpha=0.9)
+rects2 = ax.bar(x + width/2, final_avg, width, label='Avg Dose', color=[colors[l] for l in labels], alpha=0.5, hatch='//')
+
+ax.set_ylabel('Total Cumulative Dose (kLux-Hours)')
+ax.set_title('End-of-Year Environmental Impact Summary', fontweight='bold')
+ax.set_xticks(x)
+ax.set_xticklabels([l.replace("Scenario ", "") for l in labels])
+ax.legend()
+
+def autolabel(rects):
+    for rect in rects:
+        height = rect.get_height()
+        ax.annotate(f'{height:.0f}', xy=(rect.get_x() + rect.get_width() / 2, height),
+                    xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=10)
+autolabel(rects1)
+autolabel(rects2)
+
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig2_final_dose_bar.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 3A: Spatial Dose Variance
+# ==========================================
+fig, ax1 = plt.subplots(figsize=(8, 6))
+for label, df_d in dfs_daily.items():
+    y_data = df_d['DoseVariance']
+    ax1.plot(df_d['Time'], y_data, label=label, color=colors[label], linewidth=2.0, alpha=0.9)
+ax1.set_title('Spatial Dose Variance (Daily Aggregated Stress)', fontweight='bold')
+ax1.set_xlabel('Month')
+ax1.set_ylabel('Variance')
+ax1.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+ax1.set_yscale('log')
+ax1.legend()
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig3a_spatial_dose_variance.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 3B: Hardware Sensor Convergence Error
+# ==========================================
+fig, ax2 = plt.subplots(figsize=(8, 6))
+df_a_d = dfs_daily["Scenario A (Baseline)"]
+ax2.plot(df_a_d['Time'], df_a_d['AvgSensorErrorPct'], color=colors["Scenario A (Baseline)"], linewidth=2.0, alpha=0.9, label='Scenario A')
+ax2.set_title('Virtual Sensor Monte Carlo Convergence', fontweight='bold')
+ax2.set_xlabel('Month')
+ax2.set_ylabel('Sensor Error (%)')
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+ax2.fill_between(df_a_d['Time'], 0, df_a_d['AvgSensorErrorPct'], color=colors["Scenario A (Baseline)"], alpha=0.3)
+ax2.legend()
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig3b_monte_carlo_convergence.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 4: Diurnal Exposure Heatmap
+# ==========================================
+df_a = dfs["Scenario A (Baseline)"]
+df_a_day = df_a.copy()
+df_a_day['Hour'] = df_a_day['Time'].dt.hour + df_a_day['Time'].dt.minute / 60.0
+
+fig, ax = plt.subplots(figsize=(10, 6))
+df_plot = df_a_day[df_a_day['DeltaMaxDose'] > 5]
+
+scatter = ax.scatter(df_plot['Time'], df_plot['Hour'], 
+                      c=df_plot['DeltaMaxDose'], cmap='inferno', 
+                      norm=mcolors.LogNorm(vmin=10, vmax=df_plot['DeltaMaxDose'].max()),
+                      s=15, alpha=0.8)
+cbar = fig.colorbar(scatter, ax=ax)
+cbar.set_label('Hourly Peak Irradiance (Lux-Hours, Log Scale)', rotation=270, labelpad=15)
+
+ax.set_title('Baseline Diurnal Exposure Heatmap (Solar Glare Profile)', fontweight='bold')
+ax.set_xlabel('Date')
+ax.set_ylabel('Time of Day (Hour)')
+ax.xaxis.set_major_formatter(mdates.DateFormatter('%b'))
+ax.invert_yaxis()
+ax.set_ylim(18, 6)
+
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig4_diurnal_heatmap.png', dpi=300)
+plt.show()
+plt.close()
+
+# ==========================================
+# Fig 6: Direct vs Indirect Peak Dose Comparison (10-Day Period)
+# ==========================================
+
+output_dir = 'figures'
+
+# Load the new scenarios
+df_window = pd.read_csv('scenario_window.csv')
+df_window['Time'] = pd.to_datetime(df_window['Time'])
+
+df_corner = pd.read_csv('scenario_corner.csv')
+df_corner['Time'] = pd.to_datetime(df_corner['Time'])
+
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10), sharex=True)
+
+# Plot for Scenario Window (using full dataset)
+ax1.plot(df_window['Time'], df_window['DeltaMaxDirectDose'], label='Peak Direct Dose', color='#dd8452', linewidth=2)
+ax1.plot(df_window['Time'], df_window['DeltaMaxIndirectDose'], label='Peak Indirect Dose', color='#4c72b0', linewidth=2)
+ax1.set_title('Scenario: Object Next to Window', fontweight='bold')
+ax1.set_ylabel('Peak Hourly Dose (Lux-Hours)')
+ax1.fill_between(df_window['Time'], df_window['DeltaMaxDirectDose'], color='#dd8452', alpha=0.15)
+ax1.fill_between(df_window['Time'], df_window['DeltaMaxIndirectDose'], color='#4c72b0', alpha=0.15)
+ax1.legend(loc='upper right')
+
+# fill the graph
+
+
+# Plot for Scenario Corner (using full dataset)
+ax2.plot(df_corner['Time'], df_corner['DeltaMaxDirectDose'], label='Peak Direct Dose', color='#dd8452', linewidth=2)
+ax2.plot(df_corner['Time'], df_corner['DeltaMaxIndirectDose'], label='Peak Indirect Dose', color='#4c72b0', linewidth=2)
+ax2.fill_between(df_corner['Time'], df_corner['DeltaMaxDirectDose'], color='#dd8452', alpha=0.15)
+ax2.fill_between(df_corner['Time'], df_corner['DeltaMaxIndirectDose'], color='#4c72b0', alpha=0.15)
+ax2.set_title('Scenario: Object in Corner', fontweight='bold')
+ax2.set_ylabel('Peak Hourly Dose (Lux-Hours)')
+ax2.set_xlabel('Date & Time')
+ax2.xaxis.set_major_formatter(mdates.DateFormatter('%b %d\n%H:%M'))
+ax2.legend(loc='upper right')
+
+plt.tight_layout()
+plt.savefig(f'{output_dir}/fig6_window_vs_corner_comparison.png', dpi=300)
+plt.show()
+plt.close()
+print("'Fig 6: Direct vs Indirect Peak Dose Comparison' successfully updated and saved!")
+\end{lstlisting}
+

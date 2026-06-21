@@ -23,7 +23,7 @@ In order to run sufficient amount of ray queries for a yearly dosimetric simulat
     \label{fig:architecture_diagram}
 \end{figure}
 
-Data flow is tightly controlled. The project parameters are serialized to JSON with the help of \texttt{ChronoProject} object and parsed with the \texttt{ProjectManager} that feeds the \texttt{LightDoseSimulator}. The \texttt{LightDoseSimulator} acts as an orchestrator controlling the time and dispatching ray queries to the DXR kernels.
+Data flow is tightly controlled. The project parameters are serialized to JSON with the help of \texttt{ChronoProject} object (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:chronoproject}) and parsed with the \texttt{ProjectManager} (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:projectmanager}) that feeds the \texttt{LightDoseSimulator}. The \texttt{LightDoseSimulator} acts as an orchestrator controlling the time and dispatching ray queries to the DXR kernels.
 
 \section{Core Simulation Engine (C\# CPU Orchestration)}
 
@@ -36,7 +36,7 @@ The central logic should guarantee mathematical determinism, avoid hardware star
     \label{fig:csharp_class_diagram}
 \end{figure}
 
-As one can see on the diagram above, the \texttt{LightDoseSimulator} depends on multiple important subsystems: \texttt{SunCalculator} for mathematical astrometry, \texttt{IrradianceBaker} for hardware dispatch and \texttt{RuntimeModelLoader} for asynchronous file I/O.
+As one can see on the diagram above, the \texttt{LightDoseSimulator} depends on multiple important subsystems: \texttt{SunCalculator} (see Appendix \ref{apx:math_models}, Listing \ref{lst:suncalc}) for mathematical astrometry, \texttt{IrradianceBaker} (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:irradiancebaker}) for hardware dispatch and \texttt{RuntimeModelLoader} for asynchronous file I/O.
 
 \subsection{The Chronological Engine and Time Stepping}
 
@@ -48,46 +48,14 @@ Aggressive computational culling is used in the hourly step loop. The engine ign
 
 During the active simulation period, the coroutine explicitly uses the \texttt{yield return null;} instruction in order to put itself to sleep until the next engine frame. Such approach allows to give a thread back to the Unity main loop thus maintaining responsive UI, proper animation of progress bar and satisfying TDR watchdog.
 
-\subsection{Mathematical Astrometry and Solar Ephemeris}
+\subsection{Implementation of Mathematical Astrometry}
+\label{sec:astrometry_implementation}
 
-In order to get metrologically correct results, the solar positioning is calculated at each hour. The \texttt{SunCalculator.cs} class (see Listing \ref{lst:suncalc}) performs rigorous mathematical models \cite{blanco2001computing} in order to get solar disc vector position and atmospheric attenuation and thus, getting physically accurate \texttt{BeamLux} and \texttt{DiffuseLux} values.
+All mathematical dependencies involving the declination of the Sun, optical air mass, and clear-sky beam irradiance (described in Section 4.7) are dynamically calculated each hour of the simulation within the \texttt{SunCalculator.cs} component (see Listing \ref{lst:suncalc}).
 
-First of all, the Julian Day (JD) epoch is calculated for the local simulation time \cite{meeus1998astronomical} and Julian centuries $T$ since J2000.0 are derived:
-\begin{equation}
-    L_0 = (280.46646 + T(36000.76983 + T \times 0.0003032)) \pmod{360^\circ}
-\end{equation}
-\begin{equation}
-    M = 357.52911 + T(35999.05029 - 0.0001537 \times T)
-\end{equation}
+While the master clock of the \texttt{LightDoseSimulator} moves forward, the Julian Day and then the Hour Angle are calculated using the double-precision floating-point format. This approach is aimed at avoiding any possible temporal drift caused by single-precision floating point numbers due to cumulative calculations of Julian time stamps over many hours in case of the annual 8,760-hour simulation.
 
-To take into account the Earth orbit eccentricity, the equation of center $C$ is calculated via Fourier series expansion and thus, giving us the apparent longitude $\lambda_{app}$:
-\begin{equation}
-    C = \sin(M)(1.914602 - 0.004817 T) + \sin(2M)(0.019993) + \sin(3M)(0.000289)
-\end{equation}
-
-The Mean Obliquity of the Ecliptic $\epsilon_0$ is corrected with the nutation correction and gives the Solar Declination $\delta$, that is an angular displacement of the sun relatively to the celestial equator:
-\begin{equation}
-    \delta = \arcsin(\sin(\epsilon) \sin(\lambda_{app}))
-\end{equation}
-
-Knowing $\delta$, the Equation of Time ($EqT$) translates the solar time into the civil time. Together with terrestrial longitude, this information gives us True Solar Time (TST) and Hour Angle $H$:
-\begin{equation}
-    H = \frac{TST}{4.0} - 180^\circ
-\end{equation}
-
-The Solar Zenith Angle $\theta_z$ and Azimuth $\phi$ can be defined relatively to latitude $\Phi$:
-\begin{equation}
-    \cos(\theta_z) = \sin(\Phi) \sin(\delta) + \cos(\Phi) \cos(\delta) \cos(H)
-\end{equation}
-
-Having the astrometric vector position, we calculate clear-sky direct-beam irradiance $E_{beam}$ with the help of Kasten–Young formula for optical air mass $AM$ \cite{kasten1989revised}:
-\begin{equation}
-    AM = \frac{1}{\sin(\alpha) + 0.50572(\alpha + 6.07995)^{-1.6364}}
-\end{equation}
-\begin{equation}
-    E_{beam} = 127500 \times 0.7^{AM^{0.678}} \quad [\text{Lux}]
-\end{equation}
-Where $\alpha$ denotes solar altitude angle ($90^\circ - \theta_z$) and $0.7$ represents baseline atmospheric transmittance factor for clear-sky conditions. For the ambient lighting, we use a simple Haurwitz clear-sky diffuse model \cite{iqbal1983introduction} that estimates the horizontal diffuse illuminance $E_{diffuse}$ relatively to the total solar constant and atmospheric penetration. Precise \texttt{BeamLux} and \texttt{DiffuseLux} values are provided to the HLSL compute kernel on each time step.
+After calculating the solar altitude and azimuth, the \texttt{SunCalculator} calculates the current \texttt{BeamLux} and \texttt{DiffuseLux} values representing the real physical energy entering the virtual atmosphere. The two very dynamic variables are sent immediately to the DXR compute shader, where the absolute limit value of the energy flux falls onto the three-dimensional scene.
 
 \section{Scene Management and Hardware Interfaces}
 
@@ -99,7 +67,7 @@ As seen in Appendix \ref{apx:csharp_code} (Listing \ref{lst:objloader}), the \te
 
 \subsection{Dynamic Material Serialization and Hierarchy Keying}
 
-Once the artifact is loaded with the runtime loader, all the original materials are stripped away completely. The simulation applies physically validated presets (such as Brick, Hardwood, Antique Glass) to the individual submeshes, and this assignment is stored securely in the \texttt{ChronoProject} JSON file.
+Once the artifact is loaded with the runtime loader, all the original materials are stripped away completely. The simulation applies physically validated presets (such as Brick, Hardwood, Antique Glass) to the individual submeshes, and this assignment is stored securely in the \texttt{ChronoProject} JSON file (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:chronoproject}).
 
 In order to reconstruct these materials safely across various application sessions, the \texttt{RuntimeModelLoader.cs} implements a unique string-keying approach. Relying solely on the \texttt{GameObject} name is impractical because there are multiple components called, for example, \texttt{Wall} or \texttt{Window\_01} in the \texttt{.obj} files. The \texttt{GetObjectKey} function creates a unique hierarchy key:
 \begin{lstlisting}[language={[Sharp]C}]
@@ -132,12 +100,12 @@ Every child vertex transform is translated in such a way that the mathematical c
 
 As described in the theoretical radiometry literature, the Monte-Carlo integration is prone to floating-point associativity errors. An even greater problem in the hybrid CPU-GPU engine is the structural non-determinism. The Unity’s \texttt{FindObjectsByType()} API doesn’t provide any deterministic order guarantees of its return value for different OSs and CPU architectures. If the assignment of the ray’s geometric \texttt{InstanceID} and corresponding physical \texttt{SimulationMaterial} is varied from run to run, then the dosimetric simulation becomes scientifically non-reproducible.
 
-In order to address this issue, the \texttt{IrradianceBaker.cs} initialization makes sure about the determinism through collection of all active \texttt{Renderer} components and their explicit sorting with highly granulated $O(n \log n)$ string-based comparison. Every submesh receives the unique \texttt{SortKey}:
+In order to address this issue, the \texttt{IrradianceBaker.cs} initialization (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:irradiancebaker}) makes sure about the determinism through collection of all active \texttt{Renderer} components and their explicit sorting with highly granulated $O(n \log n)$ string-based comparison. Every submesh receives the unique \texttt{SortKey}:
 \begin{equation}
     \text{SortKey} = \text{ScenePath} \,|\, \text{TransformHierarchy} \,|\, \text{Type} \,|\, \text{MaterialSlot}
 \end{equation}
 
-The \texttt{TransformHierarchy} is determined with the recursive traversal of the parent chain where the exact \texttt{GetSiblingIndex()} padded up to six digits (like \texttt{000002:Wall/000000:Window}). This granulated sorting makes sure that the structural Index and Vertex buffers uploaded to the GPU along with the \texttt{\_SimulationMaterials} \texttt{StructuredBuffer} have mathematically identical and well-aligned content, which ensures the reproducibility in the lux-hours accumulation.
+The \texttt{TransformHierarchy} is determined with the recursive traversal of the parent chain where the exact \texttt{GetSiblingIndex()} padded up to six digits (like \texttt{000002:Wall} or \texttt{000000:Window}). This granulated sorting makes sure that the structural Index and Vertex buffers uploaded to the GPU along with the \texttt{\_SimulationMaterials} \texttt{StructuredBuffer} have mathematically identical and well-aligned content, which ensures the reproducibility in the lux-hours accumulation.
 
 \section{Hardware-Accelerated Path Tracing (HLSL / DXR)}
 
@@ -160,7 +128,7 @@ private struct MeshMetadata {
 
 Moreover, GPU is expecting \texttt{float4} structures for efficient SIMD processing. Thus, the \texttt{\_NormalMap} texture is using all four channels, where $x, y, z$ correspond to the geometric coordinates while the alpha channel $w$ acts as the binary coverage flag of valid geometry and padding.
 
-The \texttt{SimulationMaterial} variables (reflectance, transmittance) are packed into the \texttt{Vector4} array and stored in the \texttt{\_SimulationMaterials} \texttt{ComputeBuffer}. During the \texttt{IrradianceBaker} TLAS building using \texttt{rtas.AddInstance()}, special flags are set. Submeshes receive the \texttt{RayTracingSubMeshFlags.ClosestHitOnly} which is hardware-specific optimization disabling the use of Any-Hit shaders during the traversal, which increases silicon performance because the simulation requires only the nearest geometric intersection point.
+The \texttt{SimulationMaterial} variables (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:simulationmaterial}) (reflectance, transmittance) are packed into the \texttt{Vector4} array and stored in the \texttt{\_SimulationMaterials} \texttt{ComputeBuffer}. During the \texttt{IrradianceBaker} TLAS building using \texttt{rtas.AddInstance()}, special flags are set. Submeshes receive the \texttt{RayTracingSubMeshFlags.ClosestHitOnly} which is hardware-specific optimization disabling the use of Any-Hit shaders during the traversal, which increases silicon performance because the simulation requires only the nearest geometric intersection point.
 
 \begin{figure}[htbp]
     \centering
@@ -208,6 +176,14 @@ The \texttt{SimulationMaterial} variables (reflectance, transmittance) are packe
 
 The pre-pass bake stage operates via the standard rasterization pipeline to store world space positions ($P$) and geometric normals ($N$) into the \texttt{\_PositionMap} and \texttt{\_NormalMap} textures. As described in Algorithm \ref{alg:ts_raytrace} and detailed in Appendix \ref{apx:pathtracer_code}, the ray-generation kernel (\texttt{IrradianceBakeRayGen}) is launched on the two-dimensional grid. If the calculated normal vector for a pixel has negligible length, this means there is a void area in the UV padding, and the thread ends prematurely to save computation cycles. Otherwise, the kernel uses $P$ and $N$ as the origin and direction to calculate the rendering equation. The architectural design of this solution allows separating light transport calculations from screen space while baking energy information into the architectural surface.
 
+\subsection{UV Space Baking Matrix and Projection Anomaly}
+
+Before launching the Texture Space Ray Tracing approach, it is necessary to derive the world-space positions ($P$) and geometrical normals ($N$) from the arbitrary 3D model and to bake them onto two-dimensional UV space. This preprocessing step requires the use of \texttt{UVSpaceBaker.shader} (see Listing \ref{lst:uvspacebaker}). For the purpose of UV space baking, drastic changes are required in the graphics pipeline in order not to render the objects with a virtual camera.
+
+In the regular way, a vertex shader transforms three-dimensional vertices into two-dimensional screen space using the MVP matrix with respect to the virtual camera. In turn, the baker shader skips the view and projection matrices and directly uses the texture coordinates (\texttt{IN.uv}). It then sets the clip-space position as \texttt{OUT.posCS = float4(ndc, 0.5, 1.0)} by forcing the fixed depth ($Z$) of 0.5 and the \texttt{ZTest Always} and \texttt{ZWrite Off} rendering states in order to project the three-dimensional geometry directly onto the near-far clip plane without accounting for its depth and usual culling process.
+
+Also, it is necessary to solve a certain projection anomaly that appears in an API-dependent way. As a rule, UV mapping implies the bottom-left origin of coordinate system (like in OpenGL), but DirectX 12 and HDRP \texttt{RenderTexture} have the top-left origin. In order not to reverse the baked positional data (and, accordingly, make all the subsequent DXR ray origins start from the wrong side of the 3D artifact), the vertex shader explicitly reverses the vertical axis (\texttt{ndc.y *= -1.0}).
+
 \subsection{Pseudo-random Sequence Generation and Hashing}
 
 The principle behind Monte Carlo integration lies in the uniform random sampling over the integration domain (celestial hemisphere). In case of any clustering and correlations of the generated numbers, the calculation of the rendering equation becomes biased resulting in the appearance of non-uniform noise.
@@ -223,7 +199,7 @@ By including the \texttt{\_FrameIndex} (a monotonically increasing integer speci
 
 To evaluate ambient light transport within the scene, \textit{ChronoLux} splits the integration into two paths within the ray generation shader.
 
-The first path calculates \textbf{Direct Sunlight}. If the surface normal matches the solar vector (\texttt{nDotSun > 0.0}), a single ray is shot directly towards the sun via \texttt{TracePath(isDirectSun = true)} invocation. Within \texttt{PathTracer.hlsl} file, direct rays are allowed to traverse transparent geometry. On material hit, the hardware queries the \texttt{\_SimulationMaterials} buffer for the transmittance of the material. In case of non-zero transmittance (for example, stained glass) the throughput is scaled down according to it, the ray is slightly moved forward and the ray shoots further through the object towards the sun. If transmittance equals zero, the ray becomes an opaque shadow-caster and returns $0.0$ lux.
+The first path calculates \textbf{Direct Sunlight}. If the surface normal matches the solar vector (\texttt{nDotSun > 0.0}), a single ray is shot directly towards the sun via \texttt{TracePath(isDirectSun = true)} invocation. Within \texttt{PathTracer.hlsl} file (see Appendix \ref{apx:pathtracer_code}, Listing \ref{lst:pathtracer}), direct rays are allowed to traverse transparent geometry. On material hit, the hardware queries the \texttt{\_SimulationMaterials} buffer for the transmittance of the material. In case of non-zero transmittance (for example, stained glass) the throughput is scaled down according to it, the ray is slightly moved forward and the ray shoots further through the object towards the sun. If transmittance equals zero, the ray becomes an opaque shadow-caster and returns $0.0$ lux.
 
 The second path evaluates \textbf{Indirect Ambient Bouncing} via Stochastic Multi-Sampling. For each pixel, a \texttt{for}-loop generates $N_{samples}$ pseudo-random vectors distributed over the hemisphere using Cosine-Weighted Importance Sampling (\texttt{GetCosineWeightedDirection}) \cite{veach1995optimally}. These rays call \texttt{TracePath(isDirectSun = false)}.
 
@@ -240,25 +216,13 @@ As the ray survives only if it passes the materials’ characteristics check, th
 
 In order to combine both scientific validity and computational feasibility, several advanced mathematical models and optimizations are implemented in the rendering engine.
 
-\subsection{Perez Sky Model Atmospheric Coefficients}
+\subsection{Implementation of Perez Sky Model in HLSL}
 
-While the solar disk itself is responsible for the most intense irradiance contribution, a great part of the ambient lighting in the architecture is due to diffuse sky scattering. \textit{ChronoLux} evaluates the latter using the Perez All-Weather Sky Model (see \texttt{SkyModel.hlsl} in Listing \ref{lst:skymodel}), which describes highly anisotropic luminance of the celestial dome.
+The fundamental theory of the Perez All-Weather Sky Model, which is explained in Section 4.6.3, requires that the analytical scattering indicatrix be directly mapped to GPU for handling millions of indirect rays in parallel. ChronoLux accomplishes this task with help of the special SkyModel.hlsl HLSL library (Listing \ref{lst:skymodel}).
 
-The implementation uses the clear sky scenario with Turbidity $T = 2.0$ and five empirically obtained static coefficients:
-\begin{itemize}
-    \item $a = -0.1058$: Controls horizon brightening/darkening.
-    \item $b = -0.0738$: Determines luminance gradient close to the horizon.
-    \item $c = 1.8200$: Controls relative intensity of circumsolar corona.
-    \item $d = -2.9744$: Determines spatial width of the circumsolar region.
-    \item $e = 0.1778$: Controls backward-scattered component opposite to the sun.
-\end{itemize}
+In case when stochastic multi-sample ray does not hit any scene objects and thus goes into the sky, the PerezFunction(theta, gamma) function is invoked. In order to reduce register accesses during DXR traversal, the five empirical coefficients (a, b, c, d, e) are hardcoded as static floats in the HLSL code.
 
-When an indirect stochastic ray does not hit any geometry, the zenith angle $\theta$ and the angular separation $\gamma$ from the sun are calculated and the relative luminance is evaluated using the scattering indicatrix function:
-\begin{equation}
-    f(\theta, \gamma) = \left[1 + a \exp\left(\frac{b}{\cos\theta}\right)\right] \times \left[1 + c \exp(d \gamma) + e \cos^2\gamma\right]
-\end{equation}
-
-Finally, the result is normalized by the dynamic \texttt{DiffuseLux} value supplied from the CPU-side astrometry module via the normalization factor $E_{diffuse} \times 0.2$. Thus, the physically correct spectral distribution is obtained.
+Since the Perez function provides the relative luminance distribution instead of energy, the float value needs to be multiplied by some physical factor. Ray-tracing shader multiplies the calculated value by the DiffuseLux uniform variable, which is dynamically passed to the shader from ChronoLux engine, and thus returns purely metrological lux payload.
 
 \subsection{Hardware Traversal Mechanics (DXR and Face Culling)}
 
@@ -270,11 +234,11 @@ Also, when the \texttt{TraceRay} intrinsic is used for direct sunlight shadows c
 
 \subsection{Automated Sensor Placement}
 
-In physical metrology, lux meters are placed in the laboratory. Similarly, \textit{ChronoLux} uses the \texttt{VirtualLuxSensor} objects. To perform objective baseline measurement, the \texttt{RuntimeModelLoader} automatizes the outdoor reference sensors’ placement. Upon environment model loading, \textit{ChronoLux} calls \texttt{CreateOutdoorReferenceSensors}. The latter iterates over all renderers to create the global bounding box of the heritage site, calculating the maximum height $Y_{max}$, added $2.0\text{m}$ to it and the total geometric radius. Five sensors are created automatically – one in the center and four in the periphery – to guarantee that, regardless of CAD artifact complexity, unobstructed sensors will constantly measure the baseline sunlight potential for a given latitude and day.
+In physical metrology, lux meters are placed in the laboratory. Similarly, \textit{ChronoLux} uses the \texttt{VirtualLuxSensor} objects (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:virtualluxsensor}). To perform objective baseline measurement, the \texttt{RuntimeModelLoader} automatizes the outdoor reference sensors’ placement. Upon environment model loading, \textit{ChronoLux} calls \texttt{CreateOutdoorReferenceSensors}. The latter iterates over all renderers to create the global bounding box of the heritage site, calculating the maximum height $Y_{max}$, added $2.0\text{m}$ to it and the total geometric radius. Five sensors are created automatically – one in the center and four in the periphery – to guarantee that, regardless of CAD artifact complexity, unobstructed sensors will constantly measure the baseline sunlight potential for a given latitude and day.
 
 \subsection{Metrological Analytics Pipeline}
 
-Scientific metrology requires raw and extractable numeric data. To perform statistical analysis in Excel or Python, the precise light-dose metrics are required. The application uses the asynchronous telemetry pipeline to transfer high-resolution floating point data from VRAM to the CPU without affecting the 60 Hz rendering loop.
+Scientific metrology requires raw and extractable numeric data. To perform statistical analysis in Excel or Python (see Appendix \ref{apx:python_code}, Listing \ref{lst:dataanalysis}), the precise light-dose metrics are required. The application uses the asynchronous telemetry pipeline to transfer high-resolution floating point data from VRAM to the CPU without affecting the 60 Hz rendering loop.
 
 \begin{figure}[H]
     \begin{algorithmic}
@@ -318,7 +282,7 @@ After transferring of float arrays to CPU memory, an optimized loop performs the
 
 The graphical interface of \textit{ChronoLux} is created using Unity's contemporary UI Toolkit (UXML/USS), not the legacy Canvas immediate-mode GUI, thus employing the strict Model-View-Controller (MVC) DOM-based architecture. The responsive framework guarantees the proper scaling on 4K laboratory displays.
 
-Scientific reproducibility implies that all the parameters of the experiment should be exactly savable. The \texttt{ProjectManager.cs} system uses the custom JSON serialization engine via \texttt{JsonUtility}. However, there is a noticeable software engineering limitation: Unity's \texttt{JsonUtility} lacks serialization of standard C\# \texttt{Dictionary<TKey, TValue>} collections.
+Scientific reproducibility implies that all the parameters of the experiment should be exactly savable. The \texttt{ProjectManager.cs} system (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:projectmanager}) uses the custom JSON serialization engine via \texttt{JsonUtility}. However, there is a noticeable software engineering limitation: Unity's \texttt{JsonUtility} lacks serialization of standard C\# \texttt{Dictionary<TKey, TValue>} collections.
 
 In order to overcome this issue, without introducing the heavyweight third-party JSON libraries (thus increasing the size of the executable) the \texttt{ChronoProject} architecture uses a data flattening approach. Instead of serializing the dictionary mapping the sub-mesh's string key to the material GUID, data is manually split into two perfectly synchronized parallel lists:
 \begin{lstlisting}[language={[Sharp]C}]
@@ -330,15 +294,42 @@ When saving the experiment, the \texttt{ProjectManager} enumerates through the a
 
 Experiment launch implies the unidirectional data flow: the \texttt{LightDoseSimulator} calculates astrometric parameters, updates the internal C\# model and issues UI property-changed events. The UI Controller catches these changes in order to update the DOM view. This design guarantees the separation of Model and View, thus avoiding direct mutation of the UI layout by intensive background computations.
 
+\subsection{Interactive Object Inspection and Navigation}
+
+While background processing and parameter extraction form the analytical backbone of the software, the need for an effective user interaction model is still paramount in order to enable efficient live parameter adjustment of materials on the complex sites. \textit{ChronoLux} uses highly integrated \texttt{ViewportController} component to connect 3D scene with the DOM-based UI toolkit.
+
+On the one hand, standard three-dimensional camera controls can prove too sluggish to examine large-scale architecture. The solution lies in implementation of the custom \texttt{FreeLookCamera} control (Listing \ref{lst:freelookcamera}), which implements a non-linear scaling of velocity in such way that a tenfold translation multiplier is applied whenever Shift key is pressed. Thus, the user will be able to swiftly cover entire church nave and then slowly approach and examine particular artifacts with great precision.
+
+On the other hand, the software features a special \texttt{ObjectPicker} with a crosshair which actively converts 2D screen space coordinates into 3D rays (Listing \ref{lst:objectpicker}). In case the ray collides with any collider, the engine traces down the hierarchy of transformations in order to generate a unique key for the object (e.g., \texttt{Wall/Window\_01}). This allows the \texttt{ViewportController} to access the internal C\# dictionary in order to bind material preset with the corresponding UI sliders. In order to instantly visualize selection, the shader introduces an additional additive \texttt{\_SelectionColor} variable, which is injected into the forward pass of the selected material and causes its emission effect.
+
+\subsection{Heatmap Visualization Pipeline}
+
+While the quantitative extraction pipeline produces CSV data for the statistical analysis, the primary way of receiving visual feedback is a specially developed high performance HDRP surface shader called \textit{HeatmapVisualizer.shader} (refer to Listing \ref{lst:heatmapvisualizer}). In the shader, an unbounded and invisible floating point dose of the energy values from the \texttt{\_DoseMap} are mapped to a human-perceptible color map.
+
+The shader uses a dynamic mathematical interpolation of a five-stop high-contrast "Inferno" color map. The value of 32-bit lux-hour is normalized to a scalar \( t \in [0, 1] \), and then the value goes through a sequence of \texttt{lerp} operations to produce a transition from black \( (t = 0) \) through dark purple, magenta and orange to bright yellow \( (t = 1.0) \). To prevent possible visual clipping in case of an overexposed pixel, the shader uses dynamic auto-scaling of the color values. The uniforms \texttt{\_MinDose} and \texttt{\_MaxDose} are passed to the GPU pipeline from the asynchronous telemetry loop on the CPU side and constantly adjust the range of the scalar \( t \) depending on the current architectural hotspot.
+
+Moreover, contrary to the regular two-dimensional overlay, the heatmap should be physically placed into the three-dimensional architectural interior. The shader properly configures the \texttt{DepthForwardOnly} pass in the HDRP pipeline so that the two-dimensional dosimetric colors are written to the global Z-buffer. It allows one to render the map correctly even in the presence of complex occlusion such as an irradiated statue covering the irradiated wall behind it in an arbitrary camera position.
+
 \section{Deep Engine Optimizations and Memory Integrity}
 
 Scalability of the dosimetric ray tracer to the level of millions of rays per frame requires the extensive optimization. The several low-level engine mechanisms need to be accurately synchronized in order to guarantee fidelity and stability of the hardware over the 8,760-hour simulation.
+
+\subsection{The Parallel Determinism Problem}\label{sec:parallel_determinism}
+One of the problems that arises when moving from the abstract realm of mathematics into practical implementations in highly parallel architectures, such as today's GPUs, is non-determinism in floating-point additions.
+
+A typical parallel tracing algorithm traces hundreds of millions of rays independently using thousands of threads simultaneously. Once the rays finish traversing the scene, all threads attempt to write their irradiance into a shared matrix of accumulations $M$.
+
+As opposed to integer numbers, floating-point operations are non-associative, meaning that $(A + B) + C \neq A + (B + C)$ because of tiny differences that occur during precision rounds in IEEE 754. As a result, the final value of luminance will be different each time the algorithm runs if the order of writing to the accumulation matrix $M$ by the threads is random.
+
+In video games, this minute difference is not detectable. When applied to science, however, non-determinism becomes unacceptable since an analysis tool must return the same results every time a test simulation is conducted.
+
+The solution to the problem for the \textit{ChronoLux} framework involves making sure that ray tracing is done and accumulations happen in a predetermined manner, through mathematical structuring of geometry or seed points. This solution may add minimal computational expense, but it guarantees mathematical consistency and reproducibility.
 
 \subsection{Ray-Origin Epsilon Offsetting and Floating Point Precision Limitations}
 
 There is a fundamental vulnerability in mathematics of the ray tracing: IEEE 754 floating point truncation. When the intersection is found by the BVH, the origin of the new ray is placed exactly on the geometric surface of the triangle. Due to the limitations of the 32-bit float precision, the calculated point can be marginally inside the geometry. Thus, the next bounce starting from this point can immediately re-intersect the origin triangle, causing noticeable shadow acne artifacts that destroy the dosimetric fidelity.
 
-In order to avoid this, \textit{ChronoLux} implements the strict normal-based epsilon offsetting in \texttt{PathTracer.hlsl}: 
+In order to avoid this, \textit{ChronoLux} implements the strict normal-based epsilon offsetting in \texttt{PathTracer.hlsl} (see Appendix \ref{apx:pathtracer_code}, Listing \ref{lst:pathtracer}):
 \begin{equation}
     \mathbf{p}_{offset} = \mathbf{p}_{hit} + \mathbf{n}_{hit} \times 0.001
 \end{equation}

@@ -87,17 +87,6 @@ The last piece of the integration domain puzzle is that of Miss evaluation. When
 
 Contrary to returning a hardcoded color, the escaping ray direction, $\omega_{escape}$, is mathematically inserted into the Perez All-Weather Sky Model function. This function calculates the elevation ($\theta_z$) and azimuth ($\gamma_s$) of $\omega_{escape}$ against the current solar location ($\theta_z$, $\gamma_s$) and uses the meteorological data of Clearness ($\epsilon$) and Brightness ($\Delta$) to calculate the physical luminance value of $\omega_{escape}$. If $\omega_{escape}$ happens to be near the solar disk, the result will undergo an exponential increase to simulate the Mie circumsolar scattering effect. Otherwise, if $\omega_{escape}$ is close to the horizon, then the Perez output transitions smoothly to simulate Rayleigh scattering.
 
-\section{The Parallel Determinism Problem}\label{sec:parallel_determinism}
-One of the problems that arises when moving from the abstract realm of mathematics into practical implementations in highly parallel architectures, such as today's GPUs, is non-determinism in floating-point additions.
-
-A typical parallel tracing algorithm traces hundreds of millions of rays independently using thousands of threads simultaneously. Once the rays finish traversing the scene, all threads attempt to write their irradiance into a shared matrix of accumulations $M$.
-
-As opposed to integer numbers, floating-point operations are non-associative, meaning that $(A + B) + C \neq A + (B + C)$ because of tiny differences that occur during precision rounds in IEEE 754. As a result, the final value of luminance will be different each time the algorithm runs if the order of writing to the accumulation matrix $M$ by the threads is random.
-
-In video games, this minute difference is not detectable. When applied to science, however, non-determinism becomes unacceptable since an analysis tool must return the same results every time a test simulation is conducted.
-
-The solution to the problem for the \textit{ChronoLux} framework involves making sure that ray tracing is done and accumulations happen in a predetermined manner, through mathematical structuring of geometry or seed points. This solution may add minimal computational expense, but it guarantees mathematical consistency and reproducibility.
-
 \section{Mathematical Dose Accumulation}\label{sec:dose_accumulation}
 The key theoretical objective of the \textit{ChronoLux} tool is not only creating a photographically accurate representation of light but rather finding the overall photochemical risk posed over a long period of time. It implies moving from considering an instantaneous value of illumination to a cumulative dosimetry one.
 
@@ -125,6 +114,114 @@ In order to retain the accumulating radiation dosage $D(P)$, the program uses th
 Therefore, according to the theory, the system makes use of a 32-bit floating point data structure (RFloat). A 32-bit float can theoretically encode $3.4 \times 10^{38}$, providing practically infinite precision for unbounded accumulation.
 
 As the simulation advances within the temporal dimension, the matrix elements continuously increase in value. The abstract mathematical information is then mapped to a heatmap for visual analytical representation of areas where photosensitivity risks are critical.
+
+\section{Physical Light Attenuation in Atmosphere}
+In order to realistically calculate incident radiation in \textit{ChronoLux}, we should understand the theoretical basis of the physical interaction between the solar photons of extraterrestrial origin and Earth's atmosphere before reaching any heritage object. Prior to reaching heritage artifact, solar radiation penetrates Earth's atmosphere, which acts as a considerable and thick participation medium. This medium redistributes energy via scattering and absorption, thus changing properties of light reaching Earth's surface.
+
+\subsection{Rayleigh and Mie Scattering}
+Solar radiation interacting with the atmosphere experiences two types of scattering which are crucial for comprehension of dual nature of daylight (direct light and diffuse). First, the process of scattering known as \textbf{Rayleigh scattering} \cite{strutt1871xv} takes place when photons collide with gases (like nitrogen or oxygen) contained in the atmosphere. These particles are substantially smaller than wavelengths of visible light. The Rayleigh scattering theory says that the intensity of scattering is inversely proportional to the fourth power of wavelength (proportional to $\lambda^{-4}$). Therefore, short wavelengths (blue and violet) experience much stronger scattering than long wavelengths (red and yellow). This is the reason why the sky looks blue. In dosimetric simulations, Rayleigh scattering defines the diffuse irradiance of the "blue sky" dome as a base and omnidirectional radiation source which is able to induce photochemical damage to artifacts even in corridors shielded from direct sunlight in the museums.
+
+Second type of scattering called \textbf{Mie scattering} \cite{mie1908beitrage} takes place when photons interact with aerosols in the lower layers of atmosphere (dust, pollen, pollution, and water vapor droplets). Contrary to Rayleigh scattering, Mie scattering is largely independent on wavelength, which is the reason why clouds look white. It is important to note that Mie scattering is directional, scattering most light forward, in direction similar to the direction of the sun. As a result, Mie scattering produces a strong circumsolar corona – a bright region around the solar disk.
+
+\subsection{The Need for Anisotropic Sky Models}
+Many computer graphics applications, including video games, treat ambient skylight as isotropic hemispherical illumination, treating sky as a simple blue flat color. Such treatment of sky is incorrect from thermodynamic and metrological perspective because of Mie and Rayleigh scattering processes. Real sky dome demonstrates obvious \textit{anisotropy} (direction-dependence). The horizon region can be much brighter/darker than the zenith as a result of optical path through atmospheric layer (horizon brightening). Also, the circumsolar region is much brighter than other regions of the sky dome.
+
+In order to make the diffuse scattering metrologically accurate in dosimetric application, \textit{ChronoLux} is based on the diffuse scattering based on the \textbf{Perez All-Weather Sky Model} \cite{perez1993all} (algorithmic implementation in Appendix \ref{apx:math_models}). In contrast to simple color-based approach, Perez model is based on five coefficients controlling horizon brightening, luminance gradient, relative intensity of the circumsolar corona, its spatial width, and backscattered light. Calculating these coefficients depending on solar altitude each hour, \textit{ChronoLux} ensures physically grounded and metrologically accurate ambient diffuse irradiance of virtual museum windows.
+
+\subsection{The Perez Scattering Indicatrix Formulation}
+The physical implementation of the Perez model relies on a scattering indicatrix function that determines the relative luminance of any point on the sky dome based on its zenith angle $\theta$ and its angular separation $\gamma$ from the sun:
+\begin{equation}
+    f(\theta, \gamma) = \left[1 + a \exp\left(\frac{b}{\cos\theta}\right)\right] \times \left[1 + c \exp(d \gamma) + e \cos^2\gamma\right]
+\end{equation}
+
+The model utilizes five empirically obtained static coefficients to shape the anisotropic properties of the sky dome. For a clear sky scenario with Turbidity $T = 2.0$, these thermodynamic parameters are typically defined as:
+\begin{itemize}
+    \item $a = -0.1058$: Controls horizon brightening or darkening.
+    \item $b = -0.0738$: Determines the luminance gradient close to the horizon.
+    \item $c = 1.8200$: Controls the relative intensity of the circumsolar corona (forward Mie scattering).
+    \item $d = -2.9744$: Determines the spatial width of the circumsolar region.
+    \item $e = 0.1778$: Controls the backward-scattered component opposite to the sun.
+\end{itemize}
+
+\section{The Theory of Solar Ephemeris}
+In order to be metrologically correct, the temporal domain of the simulation has to correspond to true celestial mechanics. \textit{ChronoLux} cannot use standard civil time which is artificial construction depending on political time zones, daylight saving and leap years. Nature doesn't know anything about it.
+
+\subsection{Astronomical Time and Julian Epoch}
+In order to track time in the simulation, avoiding artificial calendar interruptions, the simulation uses the theory of \textbf{Julian Day (JD) epoch} \cite{meeus1998astronomical}. Julian Day system represents a continuous count of days and fractions thereof since noon Universal Time on January 1, 4713 BCE. For example, a civil date like May 24, 2026, at 14:30 is converted to UTC and then to the Julian timeline, resulting in single floating-point number (e.g., JD 2461185.104). This eliminates all complications related to Gregorian calendar. From Julian Day, the simulation obtains Julian centuries since J2000.0 epoch ($T$), continuous variable, which is the basis for calculating exact orbital position of Earth at any microsecond of the simulation.
+
+\subsection{The Equation of Time and the Analemma}
+The second problem between civil time and real time is caused by the fact that Earth moves in ellipse rather than in circle and the angle between equator and ecliptic is equal to $23.44^\circ$. According to Kepler's laws, planet moves faster at perihelion and slower at aphelion. Coupled with the tilt of equator relative to ecliptic, this means that a "true solar day" is not equal to 24 hours. A civil clock moves uniformly and therefore will drift relative to the Sun's position. Recording the Sun's position at exactly 12:00 civil time each day for a year from the same location results in drawing of the asymmetrical figure-eight in the sky—the \textit{analemma}. To solve this problem, the \textbf{Equation of Time (EoT)} gives the difference between Mean Solar Time (civil time) and True Solar Time (physical solar position). Ignoring EoT will result in wrong shadow directions and, thus, will invalidate dosimetric exposure calculations on artifacts. Using the equation allows to precisely calculate the Hourly Angle ($H$), so the simulated solar rays will intersect heritage geometry correctly for any day of meteorological year.
+
+\subsection{Solar Zenith and Air Mass Attenuation}
+Once the celestial timeline is normalized against the Julian epoch, the precise geometrical Solar Zenith Angle $\theta_z$ and Azimuth $\phi$ can be defined relative to the local terrestrial latitude $\Phi$ and the solar declination $\delta$. The solar declination is derived from the ecliptic longitude $\lambda_{app}$ and the Earth's axial tilt $\epsilon$:
+\begin{equation}
+    \delta = \arcsin(\sin(\epsilon) \sin(\lambda_{app}))
+\end{equation}
+\begin{equation}
+    \cos(\theta_z) = \sin(\Phi) \sin(\delta) + \cos(\Phi) \cos(\delta) \cos(H)
+\end{equation}
+
+Where $H$ is the calculated Hour Angle. Having established the astrometric vector, the clear-sky direct-beam irradiance $E_{beam}$ must be calculated by accounting for the physical depth of the atmosphere the light must penetrate. This depth is described by the optical air mass $AM$, modeled accurately by the Kasten–Young formula \cite{kasten1989revised}:
+\begin{equation}
+    AM = \frac{1}{\sin(\alpha) + 0.50572(\alpha + 6.07995)^{-1.6364}}
+\end{equation}
+\begin{equation}
+    E_{beam} = 127500 \times 0.7^{AM^{0.678}} \quad [\text{Lux}]
+\end{equation}
+Where $\alpha$ denotes the solar altitude angle ($90^\circ - \theta_z$) and $0.7$ represents the baseline atmospheric transmittance factor for ideal clear-sky conditions.
+
+\section{The Rendering Equation and Thermodynamic Conservation}
+\textit{ChronoLux} is based on the theory of light transport in physically based manner, as formulated for computer graphics in 1986 by James Kajiya \cite{kajiya1986rendering}. In order to simulate light transport in a complex architectural space, the engine solves this continuous mathematical equation.
+
+\subsection{The Integral Formulation}
+The total radiant energy leaving a surface point $P$ towards viewing direction $\omega_o$ is represented by the \textbf{Rendering Equation}:
+
+\begin{equation}
+    L_o(P, \omega_o) = L_e(P, \omega_o) + \int_{\Omega} f_r(P, \omega_i, \omega_o) L_i(P, \omega_i) (\omega_i \cdot N) d\omega_i
+\end{equation}
+
+For those who don't have background in advanced calculus and radiometry, the equation can be explained using the following notions:
+\begin{itemize}
+    \item \textbf{$L_o(P, \omega_o)$ (Outgoing Light):} The quantity the equation calculates—the total light leaving point $P$ in direction $\omega_o$.
+    \item \textbf{$L_e(P, \omega_o)$ (Emitted Light):} Light emitted within the object itself (glow). For typical heritage artifacts like marble, oil paintings or wooden furniture, this term is zero.
+    \item \textbf{$\int_{\Omega} d\omega_i$ (The Hemisphere Integral):} At microscopic point of the surface, this integral goes over the whole half sphere $\Omega$, summing light coming from all possible directions $\omega_i$.
+    \item \textbf{$f_r(P, \omega_i, \omega_o)$ (BRDF):} Bidirectional Reflectance Distribution Function, function describing the material's response to light (how much light is reflected and in which directions).
+    \item \textbf{$L_i(P, \omega_i)$ (Incoming Light):} Light energy coming to $P$ from direction $\omega_i$, direct sunlight or light coming from surrounding surfaces.
+    \item \textbf{$(\omega_i \cdot N)$ (Lambert's Cosine Law):} Geometrical attenuation factor. The ray hitting the surface perpendicularly forms concentrated light spot, while grazing incidence causes the same light to distribute over bigger area, making it less intensive. Dot product takes this into account.
+\end{itemize}
+
+Since the integral contains the summation of infinite number of incoming directions $d\omega_i$ over the hemisphere, the exact analytical solution of the equation is impossible. Therefore, numerical approximation method called \textbf{Monte Carlo technique} with Next Event Estimation (described in Section \ref{sec:dosimetric_algorithm}, algorithmic implementation in Appendix \ref{apx:pathtracer_code}) is used to approximate the integral with thousands of sample rays.
+
+\subsection{Helmholtz Reciprocity and Energy Conservation}
+To ensure that the numerical solution to the Rendering Equation will be physically correct, the BRDF of the material ($f_r$) should adhere strictly to the principles of thermodynamics in particular, \textbf{Law of Conservation of Energy}. In many arbitrary video game engines, reflective materials could be adjusted to give off more light than they get – resulting in visually striking yet metrologically incorrect situation when objects create an impossible amount of extra energy. On the contrary, \textit{ChronoLux} follows strict mathematical limitations. Whenever a photon strikes a physical medium, the incoming energy splits into three distinct channels: \textbf{Reflectance ($R$)}, \textbf{Transmittance ($T$)}, and \textbf{Absorptance ($A$)}. The thermodynamical limitation requires that the sum of all these channels equals to the incoming energy:
+\begin{equation}
+    R + T + A = 1.0
+\end{equation}
+
+Thus, dark mahogany floor will have large $A$ (Absorptance), small $R$ (Reflectance) and $T=0$ (Transmittance). At the same time, clean glass will have large $T$ (Transmittance) with small $R$ (Reflectance) and small $A$ (Absorptance). Therefore, the simulation engine imposes limitation of $R + T \le 1.0$. This guarantees the \textbf{Helmholtz reciprocity}, i.e. optical path is physically reversible, and underlying physics are valid independently from the direction of the light propagation. This limitation is the basis of the possible usage of \textbf{Russian Roulette} path termination technique – whenever the simulated ray strikes a dark carpet (large $A$), the engine uses the small value of $R+T$ as a probability threshold, making it more likely for a photon to be absorbed rather than continue traveling. Thus, this process guarantees convergence of stochastic simulation to physical dose without any energy feedback loops.
+
+\section{Theoretical Limitations of Photochemical Degradation}
+After we have formulated the physical transport of light energy within an architectural volume, it is time to discuss the purpose of energy tracking – the assessment of photochemical degradation risks. When light interacts with an object of cultural heritage, there is no mere abstraction of physical interaction, but the interaction between light and the molecular structure of the material.
+
+\subsection{Photon Energy and Molecular Disruption}
+In order to assess dosimetric risk, light should be viewed not only as a continuous wave but as a flux of discrete energy quanta, photons. According to the Planck–Einstein relation \cite{einstein1905erzeugung}, the energy ($E$) of each photon is directly proportional to its frequency ($\nu$) and inversely proportional to its wavelength ($\lambda$):
+\begin{equation}
+    E = \frac{hc}{\lambda}
+\end{equation}
+
+where:
+\begin{itemize}
+    \item $h$ is the Planck constant ($6.626 \times 10^{-34}$ J$\cdot$s).
+    \item $c$ is the speed of light in a vacuum ($3 \times 10^8$ m/s).
+    \item $\lambda$ is the photon's wavelength.
+\end{itemize}
+
+This formula introduces an important concept in preventive conservation – short-wavelength photons carry disproportionately higher destructive energy. The visible part of the daylight spectrum ranges from 400 nm (violet) to 700 nm (red); however, unfiltered solar radiation contains considerable amounts of both Ultraviolet (10-400 nm) and Infrared radiation (700 nm – 1 mm). Ultraviolet photons, due to their extremely short wavelengths, carry enough energy to destroy covalent bonds in complex organic molecules, found in old oil paintings, medieval fabrics and ancient wood. Such microscopic disruptions manifest themselves as macroscopic fading, yellowing, embrittlement, color desaturation. However, Infrared photons, while carrying less energy, can cause substantial thermal excitation of the molecules, leading to thermal distortion, cracking and desiccation of the material through local heating.
+
+\subsection{The Law of Reciprocity in Photochemical Damage}
+According to classical photochemical theory, the total amount of degradation in an organic material is governed by the \textbf{Law of Reciprocity} or Bunsen-Roscoe law \cite{bunsen1859photochemical}. The idea behind this law is that the total light dose absorbed in an object determines the degree of photochemical reaction, regardless of the exact speed of energy delivery. In other words, extremely high-intensity exposure over short periods of time would yield the same theoretical photochemical damage as lower intensity exposure over a long period of time if total energy dose is equal. For example, exposure to 1,000 Lux for one hour gives the same theoretical photochemical damage as exposure to 50 Lux for 20 hours, provided that total energy dose is 1,000 Lux-hours.
+
+This basic principle becomes the foundation of the temporal integration approach described in Section \ref{sec:dose_accumulation}. \textit{ChronoLux} accumulates the instantaneous irradiance $E_t(P)$ over the entire 8,760-hour meteorological year, thus implementing the Bunsen-Roscoe reciprocity principle. As a result, conservators are able to define strict annual exposure limits (for example, 50,000 Lux-Hours for moderately sensitive objects like oil paintings, or 15,000 Lux-Hours for highly sensitive objects such as watercolors, paper and silk).
 
 \section{Conclusion}
 Thus, in conclusion, the theories described in the current chapter make \textit{ChronoLux} a purely metrological simulation software. Abandoning the bias-laden approach of the Screen Space rendering in favor of the Texture Space ray tracing method guarantees complete geometrical coverage. Furthermore, Next Event Estimation, together with the Perez Sky Model algorithm, ensures exact computation of the light transport. Finally, accumulating irradiation in an arbitrarily precise floating point matrix allows for accurate simulation of photochemical degradation for meteorological years.
