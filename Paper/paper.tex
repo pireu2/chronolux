@@ -34,18 +34,18 @@
 
 \title{Real-Time Light Dosimetry for Heritage Digital Twins via Texture Space Ray Tracing}
 
-\author{\IEEEauthorblockN{Sebastian Duică}
-    \IEEEauthorblockA{\textit{Computer Science Department} \\
-        \textit{Technical University of Cluj-Napoca}\\
-        Cluj-Napoca, Romania \\
-        Duica.Ro.Sebastian@student.utcluj.ro} \\
-    % \and
-    % \IEEEauthorblockN{Advisor Name}
-    % \IEEEauthorblockA{\textit{Computer Science Department} \\
-    % \textit{Technical University of Cluj-Napoca}\\
-    % Cluj-Napoca, Romania \\
-    % advisor.email@example.com}
-}
+% \author{\IEEEauthorblockN{Sebastian Duică}
+%     \IEEEauthorblockA{\textit{Computer Science Department} \\
+%         \textit{Technical University of Cluj-Napoca}\\
+%         Cluj-Napoca, Romania \\
+%         Duica.Ro.Sebastian@student.utcluj.ro}
+%     \and
+%     \IEEEauthorblockN{Victor Ioan Bâcu}
+%     \IEEEauthorblockA{\textit{Computer Science Department} \\
+%         \textit{Technical University of Cluj-Napoca}\\
+%         Cluj-Napoca, Romania \\
+%         victor.bacu@cs.utcluj.ro}
+% }
 
 \maketitle
 
@@ -67,25 +67,13 @@ The other innovation brought by the authors is the possibility of virtual point-
 
 \section{Related Work}
 
-\subsection{Physical Dosimetry and IoT Sensor Networks}
-
-In terms of the real-world application of preventive conservation practices in museums, there has been a clear shift towards utilizing IoCT and physical light dosimetry approaches. The latest generation of IoT photometers \cite{silva2020climate} allows for continual and remote monitoring of the levels of ambient light, thereby enabling the relevant museum personnel to take action once light exposure surpasses acceptable limits \cite{chianese2016internet}. Physical photometric measurements can be used for obtaining ground truth, but such devices exhibit two main shortcomings, being merely reactive and measuring irradiance at just one localized point. ChronoLux complements physical photometers by providing the ability to simulate spatial dose variation throughout the artifact geometry continuously.
-
 \subsection{Traditional Simulation in Conservation}
 
-In the case of predictive analysis, the typical process involves extensive use of offline architectural simulation software packages, such as Radiance \cite{ward1998rendering}. Utilizing backward ray-tracing algorithms and irradiance caching, such tools offer a reliable approach for accurately modeling the physical lighting distributions in architectural geometry. However, they are frequently employed in the calculation of lighting limits according to preventive conservation guidelines defined by Michalski \cite{michalski1987damage} and the International Commission on Illumination (CIE) \cite{cie2004control}, where museum exhibits should be exposed for no more than certain numbers of Lux-Hours per year (e.g., no more than 50,000 Lux-Hours for highly sensitive materials like watercolor or textile paintings). While the offline simulation ensures an extremely precise, mathematically provable physical model and lighting distribution calculations, its very architecture imposes a significant bottleneck in the conservation workflow. In particular, lacking a hardware-accelerated renderer with real-time denoising and being limited to CPU-only calculations, the calculation of a single, one-year long exposure with hourly resolution might take up to several hours, thus prohibiting any sort of interactive work with the data. As opposed to those traditional simulators, ChronoLux provides the same level of physically accurate metrology, i.e., respects Lambertian scattering and energy conservation laws, but at real-time render speeds using a GPU-powered approach.
-
-\subsection{Precomputed Illumination in Virtual Heritage}
-
-In order to overcome the processing limitations of offline rendering, many virtual heritage projects use Precomputed Radiance Transfer (PRT) along with lightmaps to enable interactive frame rates \cite{sloan2002precomputed}. This enables exploration of heritage assets with physically accurate lighting that is computed offline and hence not interactive. Inherently, PRT works under the assumption of a static scene. Should one wish to modify the transmittance values of the conservation glass or alter the position of the asset for testing purposes, the lightmap will need to be re-computed again from scratch, defeating the very purpose of interactivity.
+In the case of predictive analysis, the typical process involves extensive use of offline architectural simulation software packages, such as Radiance \cite{ward1998rendering}. Utilizing backward ray-tracing algorithms and irradiance caching, such tools offer a reliable approach for accurately modeling the physical lighting distributions in architectural geometry. However, they are frequently employed in the calculation of lighting limits according to preventive conservation guidelines defined by Michalski \cite{michalski1987damage} and the International Commission on Illumination (CIE) \cite{cie2004control}, where museum exhibits should be exposed for no more than certain numbers of Lux-Hours per year (e.g., no more than 50,000 Lux-Hours for highly sensitive materials like watercolor or textile paintings). While the offline simulation ensures an extremely precise, mathematically provable physical model and lighting distribution calculations, its very architecture imposes a significant bottleneck in the conservation workflow. In particular, lacking a hardware-accelerated renderer with real-time denoising and being limited to CPU-only calculations, the calculation of a single, one-year long exposure with hourly resolution might take up to several hours, thus prohibiting any sort of interactive work with the data. As opposed to those traditional simulators, ChronoLux provides the same level of physically accurate metrology, i.e., respects Lambertian scattering and energy conservation laws, but at real-time render speeds using a GPU-powered approach. In order to overcome the processing limitations of offline rendering, many virtual heritage projects use Precomputed Radiance Transfer (PRT) along with lightmaps to enable interactive frame rates \cite{sloan2002precomputed}.
 
 \subsection{Advances in Real-Time Ray Tracing}
 
 The adoption of hardware-accelerated Monte Carlo Path Tracing methods \cite{kajiya1986rendering, veach1995optimally} using the latest generation of Direct X Ray Tracing architecture \cite{burgess2020rtx} marks a milestone in the field of interactive graphics. The existence of dedicated hardware cores designed for BVH traversal and ray intersection has made real-time Global Illumination possible. This trend is accompanied by the rise of Texture Space Shading (TSS) \cite{hasselgren2016texture}, which allows us to remove shading from the pixel grid of the final image. Most recently, TSS technology has gained the ability to cache and stabilize Monte Carlo noise between temporal frames \cite{smith2024texture}, making it possible to use cached shading results between frames and implement complicated materials without temporal aliasing. Nonetheless, despite these breakthroughs in the technology, all existing frameworks of real-time ray-tracing remain optimized mostly for visual performance and screen-space frame rate. These systems discard the lighting information outside the bounds of the camera's view using the frustum culling approach and don't support persistence in accumulations of raw Lux-Hours over time. ChronoLux is a framework that re-architects this DXR pipeline and uses ray launches from texture space coordinates instead of the virtual camera lenses to make the process of shading completely mathematically sound and independent of the camera itself.
-
-\subsection{Digital Twins in Cultural Heritage}
-
-Digital Twins are now more commonly being applied in the digitization process of heritage assets using 3D laser scanning technologies \cite{niccolucci2022digital, jouan2020digital}. With all the developments, many heritage digital twins continue to be used merely as informative databases or as sensor alert mechanisms that operate reactively instead of predictively through simulation. This is where ChronoLux comes in. This approach converts passive 3D models into virtual simulations governed by the Perez All-Weather Sky Model \cite{perez1993all} and leveraging modern hardware for maximum accuracy and performance.
 
 \section{Methodology \& System Architecture}
 
@@ -157,31 +145,7 @@ Despite the fact that heat map visualization (with consideration of the Inferno 
 \begin{equation}
     \sigma^2 = \frac{1}{N} \sum_{i=1}^{N} (D_i - \bar{D})^2
 \end{equation}
-Furthermore, these virtual Lux probes calculate real time Monte Carlo convergence errors compared to theoretical values. Considering the fact that any attempt of GPU to CPU readout introduces serious synchronization issues, the telemetry process proceeds asynchronously utilizing a background headless thread in C\#. As detailed in Algorithm~\ref{alg:async_telemetry}, this thread safely sums up every hourly delta value as well as maximum exposure and variance metrics, exporting the results to a standard CSV array without interrupting the 60 FPS render cycle.
-
-\begin{figure}[htbp]
-    \begin{algorithmic}
-        \REQUIRE $AccumBuf$, $CSVStream$, $CurrentHour$
-        \STATE $\textsc{DispatchComputeShader}(CurrentHour)$
-        \STATE $Request \leftarrow \textsc{AsyncGPUReadback}(AccumBuf)$
-        \WHILE{\textbf{not} $Request.isDone$}
-        \STATE \textbf{yield return} $\text{null} \quad \text{// Maintain 60 FPS render cycle}$
-        \ENDWHILE
-        \STATE $Data \leftarrow Request.\textsc{GetData}()$
-        \STATE $\mu \leftarrow 0, \; MaxDose \leftarrow 0, \; \sigma^2 \leftarrow 0$
-        \FOR{\textbf{each} $p \in Data$}
-        \STATE $\mu \leftarrow \mu + (p / N)$
-        \STATE $MaxDose \leftarrow \max(MaxDose, p)$
-        \ENDFOR
-        \FOR{\textbf{each} $p \in Data$}
-        \STATE $\sigma^2 \leftarrow \sigma^2 + (p - \mu)^2 / N$
-        \ENDFOR
-        \STATE $CSVStream.\textsc{Append}(CurrentHour, MaxDose, \mu, \sigma^2)$
-    \end{algorithmic}
-    \caption{Asynchronous Headless Telemetry Extraction Pipeline}
-    \label{alg:async_telemetry}
-\end{figure}
-
+Furthermore, these virtual Lux probes calculate real time Monte Carlo convergence errors compared to theoretical values. Considering the fact that any attempt of GPU to CPU readout introduces serious synchronization issues, the telemetry process proceeds asynchronously utilizing a background headless thread in C\#. This thread safely sums up every hourly delta value as well as maximum exposure and variance metrics, exporting the results to a standard CSV array without interrupting the 60 FPS render cycle.
 
 \section{Case Studies \& Empirical Results}
 
@@ -201,13 +165,7 @@ This configuration presents a worst case baseline of unlimited light exposure to
     \label{fig:scenario_a_max}
 \end{figure}
 
-\begin{figure}[htbp]
-    \centerline{\includegraphics[width=0.9\columnwidth]{fig1b_cumulative_avg_dose.png}}
-    \caption{CIE Light Dosimetry results for Scenario A showing cumulative average dose over the 8760 hours.}
-    \label{fig:scenario_a_avg}
-\end{figure}
-
-As shown in Figure~\ref{fig:scenario_a_max} and Figure~\ref{fig:scenario_a_avg}, the result of such an extreme configuration is the catastrophic peak light dose of 6.6M Lux-Hours  far surpassing the maximum light stress capacity of CIE's recommended 50,000 Lux-Hour threshold for sensitive materials \cite{cie2004control}.
+As shown in Figure~\ref{fig:scenario_a_max}, the result of such an extreme configuration is the catastrophic peak light dose of 6.6M Lux-Hours  far surpassing the maximum light stress capacity of CIE's recommended 50,000 Lux-Hour threshold for sensitive materials \cite{cie2004control}.
 
 \begin{figure}[htbp]
     \centerline{\includegraphics[width=0.9\columnwidth]{fig4_diurnal_heatmap.png}}
@@ -243,9 +201,6 @@ The data demonstrates the dynamic nature of daylighting geometry with respect to
 
 \section{Performance \& Validation}
 
-\subsection{Computational Efficiency}
-Texture space ray-tracing paradigm offers numerous performance benefits. Traditional CPU-based offline rendering of light stress typically takes several hours for one chronological exposure. Our framework is based on the DX12 engine and uses GPU hardware acceleration of intersection cores to achieve real-time interactivity. Calculation of telemetry data is performed asynchronously, and the rendering process operates at constant stable 60 FPS rate.
-
 \subsection{Scientific Validation}
 Though the process of heat maps generation requires minor computational effort, metrological analysis requires us to make sure about the accuracy of calculations from a physical standpoint. Hence, the necessity to automatically place the Lux sensors outside the scene and analyze their spatial variance ($\sigma^2$) as well as convergence errors arose. The entire procedure took place during 8,760 rendering cycles of the scene.
 
@@ -267,8 +222,6 @@ The graphs provided in Figure~\ref{fig:validation_stress_variance} and Figure~\r
 
 In addition, the noted differences in terms of shape among the variance curves can be directly attributed to the placement of the artifact and its related incidence angle toward the sun. The peaks that have been noted in certain periods are directly correlated to the time periods when the direction of the vector from the sun is able to give it an uninterrupted path to the artifact, hence causing variance in the radiation levels. Despite these notable changes based on seasons and geometry, it is evident that the general trend of the curves still holds strong. Mathematically speaking, it shows the correctness of the Monte Carlo engine.
 
-
-
 \section{Conclusion \& Future Work}
 This paper presented ChronoLux, an interactive, hardware-accelerated Digital Twin framework explicitly engineered for the scientific metrology of photodegradation in cultural heritage artifacts. By fundamentally rethinking the rendering pipeline and shifting from transient screen-space rasterization to permanent Texture Space Ray Tracing, we successfully solved the temporal and spatial limitations that previously restricted graphics engines from performing rigorous radiometric dosimetry.
 
@@ -276,14 +229,8 @@ Through the integration of the Perez All-Weather Sky Model and a highly optimize
 
 The empirical case studies validated the framework's efficacy as a non-destructive conservation sandbox. By simulating the long-term light exposure of a 2K high-fidelity Stanford Bunny scan, we demonstrated how the Digital Twin can isolate and quantify the exact radiometric impact of varying environmental interventions. Scenario testing revealed that synergistic interventions---such as repositioning the artifact to exploit geometric occlusion alongside the installation of UV-blocking tinted glazing and matte flooring---could successfully reduce a catastrophic 6.6 million Lux-Hour peak dose down to safe conservation thresholds of less than 150k Lux-Hours. Most critically, the scientific metrology was mathematically validated. By utilizing an automated array of out-of-bounds virtual Lux Sensors to sample the raw, untonemapped accumulation buffers, we tracked the Monte Carlo convergence error via the standard error of the mean ($SEM = \sigma / \sqrt{N}$). The continuous integration proved that the variance graphs structurally adhere to the physical realities of shifting solar vectors, confirming that the engine reliably calculates stable, physically-based light transport dynamics rather than stochastic rendering noise.
 
-\subsection{Future Work}
-Despite having the ability to provide an accurate mathematical basis for geometric and radiometric metrology of fading in objects at present, there is much room for growth in the field, which can take place via a number of approaches.
-
-Firstly, the most essential mathematical enhancement in the current version will be the inclusion of material-specific spectral sensitivity curves. Presently, the program uniformly integrates raw radiometric irradiance values. In future versions, however, the framework should be upgraded to accommodate internal floating-point representation and incorporate CIE $V(\lambda)$ luminous efficiency curve as well as ISO Blue Wool standard fading spectrums. With the introduction of wavelength-dependent spectral arrays that go beyond broadband radiometry, the framework would have the ability to make highly accurate predictions about colorimetric fading ($\Delta E$) and material degradation rate, e.g., differentiating between that of 16th-century oil paints and that of acrylic.
-
-Lastly, the ability of the framework to predict fading rates can be localized by integrating live or historical meteorological APIs. Presently, the program uses a static sky with a worst-case Perez model of irradiance with $T = 2.0$. With the help of a REST API connection to local meteorological stations with historical data, the program would be able to build an accurate digital twin of the weather and atmospheric state, making it possible to accurately emulate irradiation based on historical values of the aerosol optical depth and atmospheric pressure in particular geographic locations.
-
-Additionally, the modern dependency on high-performance consumer graphics cards in architecture makes both financial and technological entry barriers for small conservation laboratories. It is reasonable and beneficial to consider a logical next step in the development of the ChronoLux system -- adopting a distributed cloud rendering technology infrastructure. Using remote computing for running complex DirectX 12 Compute Shader computations and Monte Carlo ray-tracing engine will allow the simulation results to be accessed by multiple thin clients simultaneously through cloud technology infrastructure that includes an enterprise-grade GPU-equipped data center. Thus, it is possible to make this expensive piece of equipment unnecessary for the operation of the program by switching to cloud infrastructure.
+\section*{Acknowledgment}
+This research was funded by the European Union's Horizon Europe Framework Program, through the ChemiNova Project, grant agreement 101132442.
 
 \bibliographystyle{IEEEtran}
 \bibliography{references}
