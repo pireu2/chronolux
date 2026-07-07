@@ -21,7 +21,7 @@ In order to run sufficient amount of ray queries for a yearly dosimetric simulat
     \includegraphics[width=\textwidth]{figures/architecture.png}
     \caption{Overall Architectural System design of \textit{ChronoLux}, detailing data paths between the Engine, the GUI, and the OS filesystem.}
     \label{fig:architecture_diagram}
-\end{figure}
+\end{figure}s
 
 Data flow is tightly controlled. The project parameters are serialized to JSON with the help of \texttt{ChronoProject} object (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:chronoproject}) and parsed with the \texttt{ProjectManager} (see Appendix \ref{apx:additional_csharp}, Listing \ref{lst:projectmanager}) that feeds the \texttt{LightDoseSimulator}. The \texttt{LightDoseSimulator} acts as an orchestrator controlling the time and dispatching ray queries to the DXR kernels.
 
