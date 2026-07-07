@@ -109,7 +109,7 @@ The simulations have been started in \textit{ChronoLux} engine, accumulating 8,7
     \label{fig:scenario_a_avg}
 \end{figure}
 
-Figures \ref{fig:scenario_a_max} and \ref{fig:scenario_a_avg} illustrating cumulative dose metrics show a peak cumulative light dose of $6.6 \times 10^6$ Lux-Hours, largely exceeding the CIE upper recommendation of 50,000 Lux-Hours per year for highly sensitive materials. The average cumulative dose across the entire surface of the artifact has also demonstrated unsustainable exponential growth, which confirms the existence of the photodegradation risk across the asset.
+Cumulative dose metrics shown in Figures \ref{fig:scenario_a_max} and \ref{fig:scenario_a_avg} demonstrate an extremely high peak of cumulative light dose reaching $6.6 \times 10^6$ Lux-Hours and a maximum value of surface average light dose of 1,682,136 Lux-Hours. These figures dramatically surpass the recommended maximum dose of 50,000 Lux-Hours per year, which is established by CIE for highly sensitive materials. The average dose of light exposure in scenario A demonstrates unsustainable exponential growth, and thus photodegradation threat is confirmed for this asset.
 
 \subsection{Diurnal Fluctuation and Hourly Stress}
 
@@ -139,7 +139,7 @@ The NEE rays into the Cosine Hemisphere for the indirect dose $E_{ind}$ lose ene
 
 \subsection{Results of the Material Intervention}
 
-Scenario B shows the drastic decrease in the light stress, with the peak dose falling from 6.6 millions to about 150 thousands Lux-Hours (97.7\% reduction). Nevertheless, it is still above the CIE 50,000 Lux-Hour limit for highly sensitive artifacts, which means that material filtration alone is not enough in case of the exposed position of the artifact to the southern window.
+The light exposure stress becomes significantly lower in Scenario B, where the average light dose reaches only 356,433.2 Lux-Hours. Nevertheless, this number still exceeds the recommended maximum of 50,000 Lux-Hours, indicating that material filtration is not enough in case when the object is located near the southern window.
 
 \section{Scenario C: Positional Optimization and Geometric Occlusion}
 
@@ -157,7 +157,7 @@ The phenomenological comparison of the hourly peak doses has been made for a 10-
     \label{fig:window_vs_corner}
 \end{figure}
 
-As shown in Figure \ref{fig:window_vs_corner}, the window-adjacent artifact has direct solar driven hourly dose spikes near 30,000 Lux-Hours at the solar noon, while the corner-located one has zero direct dose, with the 5,000 Lux-Hour dose being caused exclusively by the indirect diffuse skylight, which is reflected by the walls and floor. In the HLSL compute shader, the shadow ray to the sun intersecting a solid wall terminates ($t > 0$, $T = 0$), thus giving $E_{dir} = 0$. Thus, this validates the ability of the engine to distinguish direct and indirect transport via BVH intersections, avoiding the rasterization-based glowing artifacts.
+As shown in Figure \ref{fig:window_vs_corner}, the window-adjacent artifact has direct solar driven hourly dose spikes near 30,000 Lux-Hours at the solar noon, while the corner-located one has zero direct dose, with the 5,000 Lux-Hour dose being caused exclusively by the indirect diffuse skylight, which is reflected by the walls and floor. In the HLSL compute shader, the shadow ray to the sun intersecting a solid wall terminates ($t > 0$, $T = 0$), thus giving $E_{dir} = 0$. Thus, this validates the ability of the engine to distinguish direct and indirect transport via BVH intersections, avoiding the rasterization-based glowing artifacts. Overall, spatial repositioning decreases the average light dose to 213,732.3 Lux-Hours. However, these values remain unsafe because of the presence of highly reflective materials in the environment.
 
 \section{Scenario D: Combined Optimal Conservation}
 
@@ -171,7 +171,7 @@ Scenario D implements the optimal strategy: the geometric occlusion (corner plac
     \label{fig:scenario_comparative_bar}
 \end{figure}
 
-Figure \ref{fig:scenario_comparative_bar} represents the bar plot comparison of the peak light doses across Scenarios A to D, demonstrating that Scenario D reaches the conservation objective: the total peak dose over 8,760 hours falls significantly below the 50,000 Lux-Hour threshold.
+Figure \ref{fig:scenario_comparative_bar} shows a bar plot comparison of light doses of Scenarios A-D, demonstrating that Scenario D meets the conservation objective: the average dose after 8,760 hours of exposure is reduced to 28,596.17 Lux-Hours, which stays under the recommended maximum of 50,000 Lux-Hours. Moreover, the absolute peak of hotspot is restricted to 150,000 Lux-Hours, which represents a dramatic 97.7\% decrease compared to the peak in Scenario A.
 
 The synergy of effects demonstrates the value of the \textit{ChronoLux} Digital Twin. The framework allows evaluating the combined interventions before any physical changes will be made, reducing risks and costs in conservation planning.
 
@@ -201,21 +201,29 @@ Where $N$ is the number of valid surface texels, $D_i$ is the dose at the texel 
 
 Figure \ref{fig:validation_stress_variance} represents the tracking of spatial variance across the 8,760-hour simulation, showcasing the stable upward trend with the distinctive steps in winter months, which is consistent with the physical expectations, since the exposed regions accumulate energy, while occluded regions stay dark.
 
-\subsection{Monte Carlo Convergence Error (SEM)}
-
-In order to verify that 64 rays per texel are enough to make the integration stable, the standard error of the mean (SEM) is computed:
+To verify that 64 rays per texel is sufficient for a stable integration, the Standard Error of the Mean (SEM) is calculated directly from this spatial variance:
 
 \begin{equation}
-    SEM = \frac{\sigma}{\sqrt{N_{rays}}}
+    SEM = \frac{\sqrt{\sigma^2}}{\sqrt{N_{rays}}}
+\end{equation}
+
+As variance changes predictably depending on physical exposure and decreases several orders of magnitude from Scenario A to Scenario D, the SEM will be restricted in its range. Thus, the stochastic estimator converges consistently throughout the whole surface of the artifact without diverging mathematically.
+
+\subsection{Analytical Percentage Error and Convergence}
+
+In order to verify whether 64 rays per texel will be sufficient for stable integration, the analytical percentage error of the virtual Lux Sensors is estimated by comparing stochastic GPU integration with the deterministic theoretical calculations:
+
+\begin{equation}
+    Error_{\%} = \left[ \frac{E_{simulated} - E_{theoretical}}{E_{theoretical}} \right] \times 100
 \end{equation}
 
 \begin{figure}[htbp]
     \centerline{\includegraphics[width=0.85\columnwidth]{fig3b_monte_carlo_convergence.png}}
-    \caption{Virtual Sensor Monte Carlo convergence error (SEM) steadily dropping and stabilizing near zero, confirming the mathematical reliability of the GPU-based path tracing integration.}
+    \caption{Virtual Sensor analytical percentage error across the 8760-hour simulation. The error remains tightly bounded between 4.5\% and 7.5\%, demonstrating seasonal stability and mathematical reliability.}
     \label{fig:validation_stress_error}
 \end{figure}
 
-Figure \ref{fig:validation_stress_error} demonstrates the gradual decrease and stabilization near zero of SEM, which means a healthy Monte Carlo estimator.
+Figure \ref{fig:validation_stress_error} shows the analytical percentage error of the Virtual Sensors over 8,760-hour simulation. This error stays strictly bounded within the interval from 4.5\% to 7.5\%, demonstrating seasonality and mathematical reliability. The error curve shows a distinct seasonality pattern with slightly increased values in winter and reduced to about 4.5\% in summer.
 
 \subsection{Asynchronous Telemetry Pipeline Integrity}
 
