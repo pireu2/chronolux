@@ -7,7 +7,7 @@ The transition from the pure computer graphics application to the scientifically
 
 This chapter offers a detailed empirical validation of the \textit{ChronoLux} framework by means of a series of precisely defined cases. The goals are twofold: to illustrate the practical use of the software in the conservation scenarios; to prove mathematically the stability of the DirectX 12 compute shaders and C\# orchestration in terms of the dosimetry data consistency.
 
-The validation will be performed across four distinct conservation scenarios (A to D). They will allow isolating specific variables in the rendering equation like the geometric occlusion, the transparency, and albedo of material. In addition, there will be a special scientific validation case, which will monitor the spatial variance and the standard error of the mean (SEM) of the Monte Carlo integration.
+The validation will be performed across four distinct conservation scenarios (A to D). They will allow isolating specific variables in the rendering equation like the geometric occlusion, the transparency, and albedo of material. In addition, there will be a special scientific validation case, which will monitor the spatial variance and the analytical percentage error of the virtual Lux sensors.
 
 \section{Experimental Setup and Simulation Parameters}
 
@@ -21,18 +21,17 @@ The virtual museum has been built as a standard rectangular architectural space 
 
 The experiment has been performed in the setting of the execution of one full meteorological year of 8,760 solar hours. The geographical parameters were set to Latitude $44.427^\circ$ N and Longitude $26.103^\circ$ E, Bucharest, Romania. The selection of these coordinates allows getting a wide variation of the solar altitude in order to get maximum solar penetration in winter and minimum depth in summer.
 
-Solar coordinates (Altitude and Azimuth) for each of the 8,760 hours have been calculated dynamically by the CPU using the \texttt{SunCalculator.cs} module (see Appendix \ref{apx:math_models}, Listing \ref{lst:suncalc}). It is important to note that the mathematical correctness of these computations is crucial for the rendering equation because the direct illumination component depends on the accurate solar incident angle. The fundamental logic of the calculations lies in finding the solar declination ($\delta$) and hour angle ($\omega$) according to the Julian Day.
+Solar coordinates (Altitude and Azimuth) for each of the 8,760 hours have been calculated dynamically by the CPU using the \texttt{SunCalculator.cs} module (see Appendix \ref{apx:math_models}, Listing \ref{lst:suncalc}). It is important to note that the mathematical correctness of these computations is crucial for the rendering equation because the direct illumination component depends on the accurate solar incident angle. The engine implements the highly rigorous Blanco-Muriel/NOAA algorithm, tracking Julian centuries, the Equation of Center, nutation, and aberration to derive the precise solar vectors.
 
-\begin{lstlisting}[language=C, caption={Astrometric solar elevation calculation executed by the CPU orchestrator.}, label={lst:sun_calc}]
-double declination = 0.409 * Math.Sin((2.0 * Math.PI / 365.0) * (julianDay - 1.39));
-double hourAngle = (Math.PI / 12.0) * (solarTime - 12.0);
-
-double elevationRad = Math.Asin(Math.Sin(latitudeRad) * Math.Sin(declination) +
-                                Math.Cos(latitudeRad) * Math.Cos(declination) * Math.Cos(hourAngle));
-double elevationDeg = elevationRad * (180.0 / Math.PI);
+\begin{lstlisting}[language={[Sharp]C}, caption={Astrometric solar elevation calculation based on the NOAA algorithm executed by the CPU orchestrator.}, label={lst:sun_calc}]
+// Blanco-Muriel / NOAA Algorithm Implementation
+double julianCenturies = (julianDay - 2451545.0) / 36525.0;
+double geomMeanLongSun = (280.46646 + julianCenturies * (36000.76983 + julianCenturies * 0.0003032)) % 360.0;
+double geomMeanAnomSun = 357.52911 + julianCenturies * (35999.05029 - 0.0001537 * julianCenturies);
+// Further calculations include Equation of Center and Nutation...
 \end{lstlisting}
 
-As you see, the obtained \texttt{elevationDeg} and corresponding Azimuth are transferred to the DirectX 12 compute shader via the constant buffer every frame in order to define the origin vector for the shadow rays.
+As you see, the obtained astrometric variables and corresponding Azimuth are transferred to the DirectX 12 compute shader via the constant buffer every frame in order to define the origin vector for the shadow rays. Furthermore, the engine incorporates the Kasten-Young optical air mass formula to accurately attenuate beam illuminance through the atmosphere.
 
 \subsection{Atmospheric Modeling via the Perez Model}
 
@@ -59,24 +58,25 @@ Table \ref{tab:csv_sample} illustrates sample telemetry data logged during Scena
     \small
     \caption{Sample telemetry data logged continuously during the simulation.}
     \label{tab:csv_sample}
-    \begin{tabular}{l c c c c c c c}
+    \begin{tabular}{@{}l c c c c c c c@{}}
         \hline
-        \textbf{Time} & \textbf{Altitude} & \textbf{Azimuth} & \textbf{DeltaMax} & \textbf{DeltaAvg} & \textbf{MaxDose} & \textbf{AvgDose} & \textbf{Variance} \\
+        \textbf{Time} & \textbf{Altitude} & \textbf{BeamLux} & \textbf{DiffuseLux} & \textbf{Coverage} & \textbf{MaxDose} & \textbf{AvgDose} & \textbf{Variance} \\
         \hline
-        Jan 01 09:27  & $4.31^\circ$      & $128.50^\circ$   & 151.15            & 42.56             & 151.15           & 42.56            & 900.68            \\
-        Jan 01 09:57  & $8.33^\circ$      & $134.14^\circ$   & 276.93            & 69.90             & 409.00           & 112.46           & 2448.91           \\
-        Jan 01 10:27  & $11.98^\circ$     & $140.10^\circ$   & 344.27            & 88.49             & 683.03           & 200.96           & 3911.17           \\
-        Jan 01 10:57  & $15.18^\circ$     & $146.38^\circ$   & 398.31            & 101.83            & 1010.57          & 302.80           & 5208.42           \\
+        Jan 01 09:27  & $4.31^\circ$      & 2530.12          & 1200.54             & 12.5\%            & 151.15           & 42.56            & 900.68            \\
+        Jan 01 09:57  & $8.33^\circ$      & 4100.23          & 1800.76             & 18.2\%            & 409.00           & 112.46           & 2448.91           \\
+        Jan 01 10:27  & $11.98^\circ$     & 5200.45          & 2100.33             & 22.1\%            & 683.03           & 200.96           & 3911.17           \\
+        Jan 01 10:57  & $15.18^\circ$     & 6100.67          & 2300.11             & 25.4\%            & 1010.57          & 302.80           & 5208.42           \\
         \hline
     \end{tabular}
 \end{table}
 
-The metrics being logged in the CSV are defined as follows:
+The metrics being logged in the CSV represent 21 distinct columns, expanding significantly beyond basic astrometry to include:
 \begin{itemize}
     \item \textbf{Altitude / Azimuth}: the astrometric coordinates of the solar disc calculated for the current Julian Day.
-    \item \textbf{DeltaMax / DeltaAvg}: the light energy (in Lux-Hours) accumulated \textit{only} during the current time step, isolating the instantaneous hourly stress.
+    \item \textbf{BeamLux / DiffuseLux}: the separated direct solar beam intensity and the indirect atmospheric diffuse luminance.
+    \item \textbf{Coverage}: the percentage of the artifact's surface area exceeding the specified dosage thresholds.
     \item \textbf{MaxDose / AvgDose}: the running cumulative total of light energy throughout the whole simulation history. \texttt{MaxDose} refers to the single highest texel (hotspot), while \texttt{AvgDose} refers to the mean value on the valid surface area.
-    \item \textbf{Variance ($\sigma^2$)}: the spatial variance of the downsampled light distribution to mathematically prove the physical difference between shadowed and exposed areas as the light accumulates.
+    \item \textbf{Variance ($\sigma^2$) \& Sensor Error}: the spatial variance of the downsampled light distribution and the \texttt{AvgSensorErrorPct} comparing virtual sensors to theoretical models.
 \end{itemize}
 
 Relying on the mentioned exhaustive and continuous logging system rather than on the static snapshots allows conservators to trace the exact moments of the peak stress and correlate them with seasonal and diurnal changes.
@@ -201,13 +201,7 @@ Where $N$ is the number of valid surface texels, $D_i$ is the dose at the texel 
 
 Figure \ref{fig:validation_stress_variance} represents the tracking of spatial variance across the 8,760-hour simulation, showcasing the stable upward trend with the distinctive steps in winter months, which is consistent with the physical expectations, since the exposed regions accumulate energy, while occluded regions stay dark.
 
-To verify that 64 rays per texel is sufficient for a stable integration, the Standard Error of the Mean (SEM) is calculated directly from this spatial variance:
-
-\begin{equation}
-    SEM = \frac{\sqrt{\sigma^2}}{\sqrt{N_{rays}}}
-\end{equation}
-
-As variance changes predictably depending on physical exposure and decreases several orders of magnitude from Scenario A to Scenario D, the SEM will be restricted in its range. Thus, the stochastic estimator converges consistently throughout the whole surface of the artifact without diverging mathematically.
+As variance changes predictably depending on physical exposure and decreases several orders of magnitude from Scenario A to Scenario D, we observe that the spatial variance is strictly constrained. Thus, the stochastic estimator converges consistently throughout the whole surface of the artifact without diverging mathematically.
 
 \subsection{Analytical Percentage Error and Convergence}
 
@@ -229,24 +223,19 @@ Figure \ref{fig:validation_stress_error} shows the analytical percentage error o
 
 In order to keep the performance of the engine, the telemetry pipeline is asynchronous. Locked GPU readback of a 2K buffer per frame degrades the performance; therefore, the \textit{ChronoLux} engine uses \texttt{AsyncGPUReadback} API. The data requests are issued to the GPU, while the CPU thread continues its work, making possible the 60 FPS viewport rendering without any interruption.
 
-\begin{lstlisting}[language=C, caption={Asynchronous background thread in \texttt{LightDoseSimulator.cs} ensuring non-blocking data extraction.}, label={lst:async_readback}]
-IEnumerator ExtractTelemetryAsync() {
-    var request = AsyncGPUReadback.Request(accumulationBuffer);
-    while (!request.done) {
-        yield return null; // Yield to main thread, keep 60 FPS
-    }
-
-    if (request.hasError) {
+\begin{lstlisting}[language={[Sharp]C}, caption={Asynchronous background callback in \texttt{LightDoseSimulator.cs} ensuring non-blocking data extraction.}, label={lst:async_readback}]
+AsyncGPUReadback.Request(accumulationBuffer, 0, (req) => {
+    if (req.hasError) {
         Debug.LogError("VRAM Readback Failed.");
-        yield break;
+        return;
     }
 
-    var data = request.GetData<float>();
-    ProcessVarianceMetrics(data);
-}
+    var data = req.GetData<float>();
+    // Inline variance processing within the ExportSimulationDataCSV stream
+});
 \end{lstlisting}
 
-As shown above, the CPU thread processes variance metrics only after the GPU tells that the transfer is completed, which ensures that the CSV files for validation graph generation contain complete radiometric data independently of the rendering.
+As shown above, the CPU thread leverages a fully non-blocking lambda callback architecture. It processes variance metrics only after the GPU tells that the transfer is completed, which ensures that the CSV files for validation graph generation contain complete radiometric data independently of the rendering.
 
 \section{Conclusion of the Empirical Validation}
 

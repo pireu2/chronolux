@@ -134,7 +134,7 @@ The physical implementation of the Perez model relies on a scattering indicatrix
     f(\theta, \gamma) = \left[1 + a \exp\left(\frac{b}{\cos\theta}\right)\right] \times \left[1 + c \exp(d \gamma) + e \cos^2\gamma\right]
 \end{equation}
 
-The model utilizes five empirically obtained static coefficients to shape the anisotropic properties of the sky dome. For a clear sky scenario with Turbidity $T = 2.0$, these thermodynamic parameters are typically defined as:
+The model uses five empirically obtained static coefficients to shape the anisotropic properties of the sky dome. For a clear sky scenario with Turbidity $T = 2.0$, these thermodynamic parameters are typically defined as:
 \begin{itemize}
     \item $a = -0.1058$: Controls horizon brightening or darkening.
     \item $b = -0.0738$: Determines the luminance gradient close to the horizon.
@@ -147,7 +147,15 @@ The model utilizes five empirically obtained static coefficients to shape the an
 In order to be metrologically correct, the temporal domain of the simulation has to correspond to true celestial mechanics. \textit{ChronoLux} cannot use standard civil time which is artificial construction depending on political time zones, daylight saving and leap years. Nature doesn't know anything about it.
 
 \subsection{Astronomical Time and Julian Epoch}
-In order to track time in the simulation, avoiding artificial calendar interruptions, the simulation uses the theory of \textbf{Julian Day (JD) epoch} \cite{meeus1998astronomical}. Julian Day system represents a continuous count of days and fractions thereof since noon Universal Time on January 1, 4713 BCE. For example, a civil date like May 24, 2026, at 14:30 is converted to UTC and then to the Julian timeline, resulting in single floating-point number (e.g., JD 2461185.104). This eliminates all complications related to Gregorian calendar. From Julian Day, the simulation obtains Julian centuries since J2000.0 epoch ($T$), continuous variable, which is the basis for calculating exact orbital position of Earth at any microsecond of the simulation.
+In order to track time in the simulation, avoiding artificial calendar interruptions, the simulation uses the theory of \textbf{Julian Day (JD) epoch} \cite{meeus1998astronomical}. Julian Day system represents a continuous count of days and fractions thereof since noon Universal Time on January 1, 4713 BCE. For example, a civil date like May 24, 2026, at 14:30 is converted to UTC and then to the Julian timeline, resulting in single floating-point number (e.g., JD 2461185.104). This eliminates all complications related to Gregorian calendar. From Julian Day, the simulation obtains Julian centuries since J2000.0 epoch ($T$), continuous variable, which is the basis for calculating exact orbital position of Earth at any microsecond of the simulation. The complete logic flow orchestrating this astrometric math and integrating it with the texture space path tracer is mapped out in Figure \ref{fig:astrometric_flowchart}.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=\textwidth]{figures/astrometric_flowchart.png}
+    \caption{The astrometric logic flowchart describing the calculation of Julian Day parameters and integration into the ray generation kernel.}
+    \label{fig:astrometric_flowchart}
+\end{figure}
+
 
 \subsection{The Equation of Time and the Analemma}
 The second problem between civil time and real time is caused by the fact that Earth moves in ellipse rather than in circle and the angle between equator and ecliptic is equal to $23.44^\circ$. According to Kepler's laws, planet moves faster at perihelion and slower at aphelion. Coupled with the tilt of equator relative to ecliptic, this means that a "true solar day" is not equal to 24 hours. A civil clock moves uniformly and therefore will drift relative to the Sun's position. Recording the Sun's position at exactly 12:00 civil time each day for a year from the same location results in drawing of the asymmetrical figure-eight in the sky—the \textit{analemma}. To solve this problem, the \textbf{Equation of Time (EoT)} gives the difference between Mean Solar Time (civil time) and True Solar Time (physical solar position). Ignoring EoT will result in wrong shadow directions and, thus, will invalidate dosimetric exposure calculations on artifacts. Using the equation allows to precisely calculate the Hourly Angle ($H$), so the simulated solar rays will intersect heritage geometry correctly for any day of meteorological year.

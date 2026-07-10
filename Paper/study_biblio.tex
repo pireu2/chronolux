@@ -79,7 +79,7 @@ DXR provides an updated shader pipeline that makes use of a wide array of framew
 \end{itemize}
 
 \subsection{Variance Reduction and Texture Space Rendering}
-For optimal performance of Monte Carlo Integration, Veach and Guibas \cite{veach1995optimally}provided the necessary mathematical foundations for incorporating sampling algorithms that enabled the utilization of Next Event Estimation (NEE). NEE greatly helps to reduce the problem of variance through explicit casting of a shadow ray to the main light source in each bounce. The technique ensures fast convergence, even when there is indirect lighting, since it disassociates sunlight rays from ambient ones.
+For optimal performance of Monte Carlo Integration, Veach and Guibas \cite{veach1995optimally} provided the necessary mathematical foundations for incorporating sampling algorithms that enabled the utilization of Next Event Estimation (NEE). NEE greatly helps to reduce the problem of variance through explicit casting of a shadow ray to the main light source in each bounce. The technique ensures fast convergence, even when there is indirect lighting, since it disassociates sunlight rays from ambient ones.
 
 Moreover, for isolating fast ray traversal from the boundaries of the viewport of a camera, Munkberg et al. \cite{hasselgren2016texture} presented modern texture-space cache methods. Traditional screen space renderers throw away useful lighting information that falls out of the current frustum view. The new technique renders images in texture space by shading objects in their corresponding UV mappings regardless of camera occlusions.
 
